@@ -1,12 +1,25 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Audit image URLs listed in a CSV file."""
 
 import argparse
 import csv
+import os
+import tempfile
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+
+FIELDNAMES = (
+    "status",
+    "content_type",
+    "content_length",
+    "response_time",
+    "result",
+    "error",
+)
 
 
 def check_image(url, timeout=15):
@@ -23,15 +36,34 @@ def check_image(url, timeout=15):
             "error": "URL is empty",
         }
 
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        username = parsed.username
+        password = parsed.password
+    except ValueError:
         return {
             "status": "",
             "content_type": "",
             "content_length": "",
             "response_time": "",
             "result": "INVALID_URL",
-            "error": "Expected an absolute HTTP or HTTPS URL",
+            "error": "Malformed URL",
+        }
+
+    if (
+        parsed.scheme.lower() not in ("http", "https")
+        or not hostname
+        or username is not None
+        or password is not None
+    ):
+        return {
+            "status": "",
+            "content_type": "",
+            "content_length": "",
+            "response_time": "",
+            "result": "INVALID_URL",
+            "error": "Expected an absolute HTTP or HTTPS URL without credentials",
         }
 
     started = time.monotonic()
@@ -87,6 +119,42 @@ def check_image(url, timeout=15):
         }
 
 
+def validate_input_csv(input_path, delimiter, required_columns):
+    """Read and validate the complete CSV before making network requests."""
+    with open(input_path, encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source, delimiter=delimiter)
+        headers = reader.fieldnames
+
+        if not headers:
+            raise ValueError("Input CSV is empty or has no header row.")
+
+        if any(header is None or not header.strip() for header in headers):
+            raise ValueError("CSV contains an empty column name.")
+
+        if len(headers) != len(set(headers)):
+            raise ValueError("CSV contains duplicate column names.")
+
+        missing = set(required_columns) - set(headers)
+        if missing:
+            raise ValueError("Missing CSV columns: " + ", ".join(sorted(missing)))
+
+        rows = []
+        for line_number, row in enumerate(reader, start=2):
+            if None in row:
+                raise ValueError(
+                    f"CSV row {line_number} has more fields than the header."
+                )
+
+            if any(value is None for value in row.values()):
+                raise ValueError(
+                    f"CSV row {line_number} has fewer fields than the header."
+                )
+
+            rows.append(row)
+
+        return rows
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Audit image URLs from a CSV file."
@@ -105,55 +173,87 @@ def main():
     if args.timeout <= 0:
         parser.error("--timeout must be greater than zero")
 
+    input_path = Path(args.input).expanduser().resolve()
+    output_path = Path(args.output).expanduser().resolve()
+
+    if input_path == output_path:
+        parser.error("Input and output paths must be different.")
+
+    if output_path.exists():
+        parser.error(
+            f"Output already exists; refusing to overwrite it: {output_path}"
+        )
+
+    if not input_path.is_file():
+        parser.error(f"Input file does not exist or is not a file: {input_path}")
+
+    required_columns = (
+        args.sku_column,
+        args.name_column,
+        args.url_column,
+    )
+
+    if len(set(required_columns)) != len(required_columns):
+        parser.error("The configured input column names must be different.")
+
     try:
-        with open(args.input, encoding="utf-8-sig", newline="") as source:
-            reader = csv.DictReader(source, delimiter=args.delimiter)
-
-            required = {
-                args.sku_column,
-                args.name_column,
-                args.url_column,
-            }
-            available = set(reader.fieldnames or [])
-            missing = required - available
-
-            if missing:
-                parser.error(
-                    "Missing CSV columns: " + ", ".join(sorted(missing))
-                )
-
-            rows = list(reader)
+        rows = validate_input_csv(input_path, args.delimiter, required_columns)
 
         fieldnames = [
             args.sku_column,
             args.name_column,
             args.url_column,
-            "status",
-            "content_type",
-            "content_length",
-            "response_time",
-            "result",
-            "error",
+            *FIELDNAMES,
         ]
 
-        with open(args.output, "w", encoding="utf-8-sig", newline="") as target:
-            writer = csv.DictWriter(
-                target,
-                fieldnames=fieldnames,
-                delimiter=args.delimiter,
-                extrasaction="ignore",
-            )
-            writer.writeheader()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_name = None
 
-            for index, row in enumerate(rows, start=1):
-                info = check_image(row.get(args.url_column), args.timeout)
-                writer.writerow({**row, **info})
-                print(f"[{index}/{len(rows)}] {info['result']}")
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8-sig",
+                newline="",
+                dir=output_path.parent,
+                prefix=f".{output_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as target:
+                temp_name = target.name
+                writer = csv.DictWriter(
+                    target,
+                    fieldnames=fieldnames,
+                    delimiter=args.delimiter,
+                    extrasaction="ignore",
+                )
+                writer.writeheader()
+
+                total = len(rows)
+                for index, row in enumerate(rows, start=1):
+                    info = check_image(row.get(args.url_column), args.timeout)
+                    writer.writerow({**row, **info})
+                    print(f"[{index}/{total}] {info['result']}")
+
+            try:
+                os.link(temp_name, output_path)
+            except FileExistsError:
+                raise ValueError(
+                    f"Output appeared during processing; refusing to overwrite: "
+                    f"{output_path}"
+                )
+            except OSError as exc:
+                raise OSError(
+                    f"Could not safely publish report at {output_path}: {exc}"
+                ) from exc
+
+        finally:
+            if temp_name and os.path.exists(temp_name):
+                os.unlink(temp_name)
 
         print(f"Finished. Audited {len(rows)} rows.")
-        print(f"Report: {args.output}")
+        print(f"Report: {output_path}")
 
-    except (OSError, csv.Error, UnicodeError) as exc:
+    except (OSError, csv.Error, UnicodeError, ValueError) as exc:
         parser.exit(1, f"Error: {exc}\n")
 
 
