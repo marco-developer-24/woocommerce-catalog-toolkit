@@ -60,8 +60,8 @@ class TestCliFileSafety(unittest.TestCase):
     def test_refuses_duplicate_headers(self):
         source = self.write_csv(
             content=(
-                "SKU;SKU;IMAGE_URL\n"
-                "A1;A2;https://example.com/image.jpg\n"
+                "SKU;PRODUCT_NAME;IMAGE_URL;SKU\n"
+                "A1;Demo;https://example.com/image.jpg;A2\n"
             )
         )
         output = self.root / "report.csv"
@@ -69,7 +69,6 @@ class TestCliFileSafety(unittest.TestCase):
         result = self.run_cli(
             "--input", source,
             "--output", output,
-            "--name-column", "SKU",
         )
 
         self.assertNotEqual(result.returncode, 0)
