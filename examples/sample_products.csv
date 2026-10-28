@@ -1,0 +1,4 @@
+﻿SKU;PRODUCT_NAME;IMAGE_URL
+DEMO-001;Producto sin imagen;
+DEMO-002;URL con protocolo incorrecto;ftp://example.com/image.jpg
+DEMO-003;URL relativa;/images/product.jpg
