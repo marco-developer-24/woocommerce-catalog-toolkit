@@ -2,6 +2,12 @@
 
 Python utilities for auditing WooCommerce catalog data.
 
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Input](https://img.shields.io/badge/Input-CSV-3B82C4)
+![Status](https://img.shields.io/badge/Status-Early%20development-64748B)
+
+---
+
 ## Current tool: Image URL Auditor
 
 Checks image URLs listed in a CSV file and generates an audit report.
@@ -15,7 +21,7 @@ The report includes:
 
 The tool identifies empty or invalid URLs, HTTP errors, and successful responses that do not declare an image content type.
 
-Note: It checks response headers. It does not verify the actual image contents.
+> **Scope note:** the auditor checks response headers. It does not verify the actual image contents.
 
 ## Requirements
 
