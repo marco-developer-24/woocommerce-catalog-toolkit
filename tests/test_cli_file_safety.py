@@ -108,6 +108,23 @@ class TestCliFileSafety(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
 
+    def test_rejects_non_finite_and_non_positive_timeouts(self):
+        source = self.write_csv()
+        invalid_timeouts = ("nan", "inf", "-inf", "0", "-1")
+
+        for timeout in invalid_timeouts:
+            with self.subTest(timeout=timeout):
+                output = self.root / f"report-{timeout}.csv"
+                result = self.run_cli(
+                    "--input", source,
+                    "--output", output,
+                    "--timeout", timeout,
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("finite number greater than zero", result.stderr)
+                self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
