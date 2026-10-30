@@ -118,7 +118,7 @@ class TestCliFileSafety(unittest.TestCase):
                 result = self.run_cli(
                     "--input", source,
                     "--output", output,
-                    "--timeout", timeout,
+                    f"--timeout={timeout}",
                 )
 
                 self.assertEqual(result.returncode, 2)
