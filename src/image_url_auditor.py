@@ -3,6 +3,7 @@
 
 import argparse
 import csv
+import math
 import os
 import tempfile
 import time
@@ -170,8 +171,8 @@ def main():
 
     if len(args.delimiter) != 1:
         parser.error("--delimiter must be exactly one character")
-    if args.timeout <= 0:
-        parser.error("--timeout must be greater than zero")
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        parser.error("--timeout must be a finite number greater than zero")
 
     input_path = Path(args.input).expanduser().resolve()
     output_path = Path(args.output).expanduser().resolve()
