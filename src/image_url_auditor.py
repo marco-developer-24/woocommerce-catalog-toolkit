@@ -84,7 +84,7 @@ def check_image(url, timeout=15):
             media_type = content_type.split(";", 1)[0].strip().lower()
             result = (
                 "OK"
-                if 200 <= status < 300 and media_type.startswith("image/")
+                if 200 <= status < 300 and status != 204 and media_type.startswith("image/")
                 else "CHECK"
             )
 
