@@ -30,6 +30,25 @@ class TestCheckImage(unittest.TestCase):
         self.assertEqual(result["content_type"], "image/jpeg")
 
     @patch("image_url_auditor.urlopen")
+    def test_custom_fractional_timeout_is_passed_to_request(self, mock_urlopen):
+        response = MagicMock()
+        response.status = 200
+        response.headers.get.side_effect = {
+            "Content-Type": "image/webp",
+            "Content-Length": "2048",
+        }.get
+        mock_urlopen.return_value.__enter__.return_value = response
+
+        result = image_url_auditor.check_image(
+            "https://example.com/image.webp",
+            timeout=0.5,
+        )
+
+        self.assertEqual(result["result"], "OK")
+        mock_urlopen.assert_called_once()
+        self.assertEqual(mock_urlopen.call_args.kwargs["timeout"], 0.5)
+
+    @patch("image_url_auditor.urlopen")
     def test_http_success_but_not_an_image(self, mock_urlopen):
         response = MagicMock()
         response.status = 200
