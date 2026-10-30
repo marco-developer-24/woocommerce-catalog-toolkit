@@ -82,11 +82,20 @@ def check_image(url, timeout=15):
             elapsed = round(time.monotonic() - started, 3)
 
             media_type = content_type.split(";", 1)[0].strip().lower()
-            result = (
-                "OK"
-                if 200 <= status < 300 and status != 204 and media_type.startswith("image/")
-                else "CHECK"
+            is_image_response = (
+                200 <= status < 300
+                and status != 204
+                and media_type.startswith("image/")
             )
+            result = "OK" if is_image_response else "CHECK"
+
+            if status == 204:
+                error = "Server returned no content (HTTP 204)"
+            elif not media_type.startswith("image/"):
+                reported_type = media_type or "missing Content-Type"
+                error = f"Response is not declared as an image ({reported_type})"
+            else:
+                error = ""
 
             return {
                 "status": status,
@@ -94,7 +103,7 @@ def check_image(url, timeout=15):
                 "content_length": content_length,
                 "response_time": elapsed,
                 "result": result,
-                "error": "",
+                "error": error,
             }
 
     except HTTPError as exc:
