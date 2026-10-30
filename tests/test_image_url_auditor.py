@@ -49,6 +49,23 @@ class TestCheckImage(unittest.TestCase):
         self.assertEqual(mock_urlopen.call_args.kwargs["timeout"], 0.5)
 
     @patch("image_url_auditor.urlopen")
+    def test_http_204_is_not_a_valid_image(self, mock_urlopen):
+        response = MagicMock()
+        response.status = 204
+        response.headers.get.side_effect = {
+            "Content-Type": "image/jpeg",
+            "Content-Length": "",
+        }.get
+        mock_urlopen.return_value.__enter__.return_value = response
+
+        result = image_url_auditor.check_image(
+            "https://example.com/empty-image.jpg"
+        )
+
+        self.assertEqual(result["status"], 204)
+        self.assertEqual(result["result"], "CHECK")
+
+    @patch("image_url_auditor.urlopen")
     def test_http_success_but_not_an_image(self, mock_urlopen):
         response = MagicMock()
         response.status = 200
