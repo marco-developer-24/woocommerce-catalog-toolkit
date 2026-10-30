@@ -49,6 +49,37 @@ class TestCheckImage(unittest.TestCase):
         self.assertEqual(mock_urlopen.call_args.kwargs["timeout"], 0.5)
 
     @patch("image_url_auditor.urlopen")
+    def test_generic_content_type_is_flagged_with_explanation(self, mock_urlopen):
+        response = MagicMock()
+        response.status = 200
+        response.headers.get.side_effect = {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": "1234",
+        }.get
+        mock_urlopen.return_value.__enter__.return_value = response
+
+        result = image_url_auditor.check_image(
+            "https://example.com/product-image"
+        )
+
+        self.assertEqual(result["result"], "CHECK")
+        self.assertIn("application/octet-stream", result["error"])
+
+    @patch("image_url_auditor.urlopen")
+    def test_missing_content_type_is_flagged_with_explanation(self, mock_urlopen):
+        response = MagicMock()
+        response.status = 200
+        response.headers.get.return_value = ""
+        mock_urlopen.return_value.__enter__.return_value = response
+
+        result = image_url_auditor.check_image(
+            "https://example.com/product-image"
+        )
+
+        self.assertEqual(result["result"], "CHECK")
+        self.assertIn("missing Content-Type", result["error"])
+
+    @patch("image_url_auditor.urlopen")
     def test_http_204_is_not_a_valid_image(self, mock_urlopen):
         response = MagicMock()
         response.status = 204
