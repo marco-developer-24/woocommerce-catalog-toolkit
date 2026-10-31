@@ -1,0 +1,9 @@
+SKU;PRODUCT_NAME;PRICE;STOCK
+DEMO-001;Producto válido;12999.90;8
+DEMO-002;Producto con SKU duplicado;15999.00;3
+DEMO-002;Producto repetido;14999.00;2
+;Producto sin SKU;7999.00;5
+DEMO-004;;9999.00;1
+DEMO-005;Precio inválido;consultar;4
+DEMO-006;Precio negativo;-500.00;0
+DEMO-007;Stock inválido;4500.00;disponible
