@@ -23,6 +23,51 @@ The tool identifies empty or invalid URLs, HTTP errors, and successful responses
 
 > **Scope note:** the auditor checks response headers. It does not verify the actual image contents.
 
+## Catalog CSV Validator
+
+Validates supplier catalog files before any import or update. It runs offline,
+does not connect to WooCommerce, and never modifies the input file.
+
+Current checks:
+- Required SKU, product name, and price columns.
+- Empty SKUs and product names (errors).
+- Duplicate SKUs (case-insensitive, ignoring surrounding whitespace).
+- Non-numeric, non-finite, or negative prices (errors).
+- Invalid, fractional, or negative stock values (warnings).
+- Missing required headers, duplicate headers, and malformed row widths.
+
+Supplier column names can be mapped through function arguments. For example:
+
+```python
+from src.catalog_csv_validator import validate_catalog_csv
+from src.catalog_csv_report import build_catalog_report, export_issues_csv
+
+issues = validate_catalog_csv(
+    "supplier_catalog.csv",
+    delimiter=",",
+    sku_column="ProductCode",
+    name_column="Description",
+    price_column="NetPrice",
+    stock_column="Available",
+)
+
+summary = build_catalog_report(total_products=120, issues=issues)
+print(summary)
+export_issues_csv(issues, "catalog_issues.csv")
+```
+
+The summary reports total products, products without errors, products with
+errors or warnings, and issue counts by severity. Stock issues are warnings:
+they can be reviewed separately without treating the entire product row as
+invalid for other fields.
+
+The CSV report contains the row number, field, original value, severity,
+machine-readable code, and explanation. Existing report files are protected
+by default; pass `overwrite=True` explicitly to replace one.
+
+Structural CSV errors (such as missing required columns or malformed rows)
+raise `ValueError`. Example input: `examples/sample_catalog.csv`.
+
 ## Requirements
 
 - Python 3.10 or newer
