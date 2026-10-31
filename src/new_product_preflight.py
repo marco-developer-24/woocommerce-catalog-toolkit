@@ -7,6 +7,9 @@ WooCommerce products. It compares identifiers and produces reviewable CSV files.
 
 import argparse
 import csv
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 STATUS_NEW = "NEW_CANDIDATE"
@@ -106,6 +109,72 @@ def write_csv_exclusive(path, headers, rows, delimiter):
         writer.writerows(rows)
 
 
+def write_preflight_outputs(
+    output_dir,
+    supplier_headers,
+    new_rows,
+    report_headers,
+    review_rows,
+    report_rows,
+    summary,
+    delimiter,
+):
+    """Write all reports to a staging directory, then publish them together."""
+    output_dir = Path(output_dir)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(
+        prefix=f".{output_dir.name}.tmp-",
+        dir=output_dir.parent,
+    ))
+    removed_empty_output = False
+
+    try:
+        write_csv_exclusive(
+            staging_dir / "new_products.csv",
+            supplier_headers,
+            new_rows,
+            delimiter,
+        )
+        write_csv_exclusive(
+            staging_dir / "review_products.csv",
+            report_headers,
+            review_rows,
+            delimiter,
+        )
+        write_csv_exclusive(
+            staging_dir / "preflight_report.csv",
+            report_headers,
+            report_rows,
+            delimiter,
+        )
+        with (staging_dir / "summary.txt").open(
+            "x", encoding="utf-8", newline="\n"
+        ) as target:
+            target.write("\n".join(summary))
+
+        # Recheck immediately before publication to avoid replacing user data.
+        if output_dir.exists():
+            if not output_dir.is_dir():
+                raise ValueError(f"Output path is not a directory: {output_dir}")
+            if any(output_dir.iterdir()):
+                raise ValueError(
+                    f"Output directory is not empty; refusing to overwrite files: {output_dir}"
+                )
+            output_dir.rmdir()
+            removed_empty_output = True
+
+        # Staging is a sibling, so publication stays on the same filesystem.
+        os.replace(staging_dir, output_dir)
+    except Exception:
+        # Preserve a pre-existing empty output directory if publication fails.
+        if removed_empty_output and not output_dir.exists():
+            output_dir.mkdir()
+        raise
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -173,7 +242,6 @@ def main():
                 f"Output directory is not empty; refusing to overwrite files: {output_dir}"
             )
 
-        # Build all output content before creating files. Refuse overwrite on every file.
         report_headers = [
             *supplier_headers, "_PREFLIGHT_ROW", "_PREFLIGHT_STATUS", "_PREFLIGHT_REASON"
         ]
@@ -213,20 +281,16 @@ def main():
             "",
         ]
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        write_csv_exclusive(
-            output_dir / "new_products.csv", supplier_headers, new_rows, args.supplier_delimiter
+        write_preflight_outputs(
+            output_dir,
+            supplier_headers,
+            new_rows,
+            report_headers,
+            review_rows,
+            report_rows,
+            summary,
+            args.supplier_delimiter,
         )
-        write_csv_exclusive(
-            output_dir / "review_products.csv", report_headers, review_rows, args.supplier_delimiter
-        )
-        write_csv_exclusive(
-            output_dir / "preflight_report.csv", report_headers, report_rows, args.supplier_delimiter
-        )
-        with (output_dir / "summary.txt").open(
-            "x", encoding="utf-8", newline="\n"
-        ) as target:
-            target.write("\n".join(summary))
 
         print(f"Checked {len(classified)} supplier rows.")
         print(f"New candidates: {counts[STATUS_NEW]}")

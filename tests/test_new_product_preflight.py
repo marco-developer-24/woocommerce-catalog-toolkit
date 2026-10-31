@@ -4,6 +4,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from src.new_product_preflight import write_preflight_outputs
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "src" / "new_product_preflight.py"
@@ -98,6 +101,41 @@ class NewProductPreflightTests(unittest.TestCase):
             result = self.run_preflight(supplier, catalog, root / "output")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing SKU column", result.stderr)
+
+    def test_failed_report_write_does_not_publish_partial_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "output"
+            original_writer_calls = 0
+            from src import new_product_preflight
+
+            original_writer = new_product_preflight.write_csv_exclusive
+
+            def fail_on_second_csv(*args, **kwargs):
+                nonlocal original_writer_calls
+                original_writer_calls += 1
+                if original_writer_calls == 2:
+                    raise OSError("simulated disk write failure")
+                return original_writer(*args, **kwargs)
+
+            with patch(
+                "src.new_product_preflight.write_csv_exclusive",
+                side_effect=fail_on_second_csv,
+            ):
+                with self.assertRaisesRegex(OSError, "simulated disk write failure"):
+                    write_preflight_outputs(
+                        output,
+                        ["SKU"],
+                        [{"SKU": "NEW-1"}],
+                        ["SKU", "_PREFLIGHT_STATUS"],
+                        [],
+                        [],
+                        ["test summary"],
+                        ";",
+                    )
+
+            self.assertFalse(output.exists())
+            self.assertEqual(list(root.glob(".output.tmp-*")), [])
 
 
 if __name__ == "__main__":
