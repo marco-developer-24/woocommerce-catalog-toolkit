@@ -7,9 +7,13 @@ WooCommerce products. It compares identifiers and produces reviewable CSV files.
 
 import argparse
 import csv
+import hashlib
+import io
 import os
+import platform
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 STATUS_NEW = "NEW_CANDIDATE"
@@ -19,30 +23,32 @@ STATUS_MISSING = "MISSING_SKU"
 
 
 def read_csv(path, delimiter, label):
-    """Read a CSV and reject malformed or ambiguous tabular structure."""
+    """Read and validate a CSV, returning the hash of the exact bytes parsed."""
     try:
-        with path.open("r", encoding="utf-8-sig", newline="") as source:
-            reader = csv.DictReader(source, delimiter=delimiter, strict=True)
-            headers = reader.fieldnames
-            if not headers:
-                raise ValueError(f"{label}: CSV is empty or has no header row.")
-            if any(header is None or not header.strip() for header in headers):
-                raise ValueError(f"{label}: CSV contains an empty column name.")
-            if len(headers) != len(set(headers)):
-                raise ValueError(f"{label}: CSV contains duplicate column names.")
+        raw_bytes = path.read_bytes()
+        file_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        text = raw_bytes.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+        headers = reader.fieldnames
+        if not headers:
+            raise ValueError(f"{label}: CSV is empty or has no header row.")
+        if any(header is None or not header.strip() for header in headers):
+            raise ValueError(f"{label}: CSV contains an empty column name.")
+        if len(headers) != len(set(headers)):
+            raise ValueError(f"{label}: CSV contains duplicate column names.")
 
-            rows = []
-            for line_number, row in enumerate(reader, start=2):
-                if None in row:
-                    raise ValueError(
-                        f"{label}: row {line_number} has more fields than the header."
-                    )
-                if any(value is None for value in row.values()):
-                    raise ValueError(
-                        f"{label}: row {line_number} has fewer fields than the header."
-                    )
-                rows.append(row)
-            return headers, rows
+        rows = []
+        for line_number, row in enumerate(reader, start=2):
+            if None in row:
+                raise ValueError(
+                    f"{label}: row {line_number} has more fields than the header."
+                )
+            if any(value is None for value in row.values()):
+                raise ValueError(
+                    f"{label}: row {line_number} has fewer fields than the header."
+                )
+            rows.append(row)
+        return headers, rows, file_sha256
     except (OSError, UnicodeError, csv.Error) as exc:
         raise ValueError(f"{label}: could not read CSV: {exc}") from exc
 
@@ -94,6 +100,37 @@ def classify_rows(supplier_rows, catalog_rows, supplier_sku_column, catalog_sku_
             "reason": reason,
         })
     return classified
+
+
+
+def build_run_provenance(
+    supplier_path,
+    catalog_path,
+    supplier_sha256,
+    catalog_sha256,
+    supplier_sku_column,
+    catalog_sku_column,
+    supplier_delimiter,
+    catalog_delimiter,
+    supplier_rows,
+):
+    """Build reproducibility metadata for the exact input bytes parsed."""
+    executed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return [
+        "RUN PROVENANCE:",
+        f"Executed at (UTC): {executed_at}",
+        f"Python version: {platform.python_version()}",
+        f"Supplier file: {Path(supplier_path).name}",
+        f"Supplier SHA-256: {supplier_sha256}",
+        f"Supplier rows: {supplier_rows}",
+        f"Supplier SKU column: {supplier_sku_column}",
+        f"Supplier delimiter: {supplier_delimiter!r}",
+        f"Catalog file: {Path(catalog_path).name}",
+        f"Catalog SHA-256: {catalog_sha256}",
+        f"Catalog SKU column: {catalog_sku_column}",
+        f"Catalog delimiter: {catalog_delimiter!r}",
+        "",
+    ]
 
 
 def write_csv_exclusive(path, headers, rows, delimiter):
@@ -212,10 +249,10 @@ def main():
         parser.error(f"Output path is not a directory: {output_dir}")
 
     try:
-        supplier_headers, supplier_rows = read_csv(
+        supplier_headers, supplier_rows, supplier_sha256 = read_csv(
             supplier_path, args.supplier_delimiter, "Supplier CSV"
         )
-        catalog_headers, catalog_rows = read_csv(
+        catalog_headers, catalog_rows, catalog_sha256 = read_csv(
             catalog_path, args.catalog_delimiter, "Catalog CSV"
         )
 
@@ -263,8 +300,17 @@ def main():
         summary = [
             "WooCommerce Catalog Toolkit — supplier preflight",
             "",
-            f"Supplier file: {supplier_path.name}",
-            f"Catalog snapshot: {catalog_path.name}",
+            *build_run_provenance(
+                supplier_path,
+                catalog_path,
+                supplier_sha256,
+                catalog_sha256,
+                args.supplier_sku_column,
+                args.catalog_sku_column,
+                args.supplier_delimiter,
+                args.catalog_delimiter,
+                len(supplier_rows),
+            ),
             f"Supplier rows checked: {len(classified)}",
             "",
             f"New candidates (not confirmed): {counts[STATUS_NEW]}",
