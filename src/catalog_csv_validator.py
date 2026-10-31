@@ -3,18 +3,14 @@
 
 import csv
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 
 
-ISSUE_FIELDS = ("row_number", "field", "value", "severity", "code", "message")
-
-
-def _issue(row_number, field, value, code, message):
+def _issue(row_number, field, value, code, message, severity="error"):
     return {
         "row_number": row_number,
         "field": field,
         "value": value,
-        "severity": "error",
+        "severity": severity,
         "code": code,
         "message": message,
     }
@@ -58,12 +54,14 @@ def validate_catalog_csv(
     price_column="PRICE",
     stock_column="STOCK",
 ):
-    """Return data-quality issues found in a supplier catalog CSV.
+    """Return row-level data-quality issues found in a supplier catalog CSV.
 
     SKU, product name and price columns are required. Stock is validated only
     when its configured column is present. Column names can be mapped to a
     supplier's headers through the keyword arguments.
 
+    Invalid SKU, name, and price values are errors. Invalid stock values are
+    warnings because stock is optional and can be excluded from an update.
     The source file is opened read-only and is never changed.
     """
     configured_columns = [sku_column, name_column, price_column]
@@ -135,12 +133,14 @@ def validate_catalog_csv(
                 if stock < 0:
                     issues.append(_issue(
                         row_number, stock_column, stock_text,
-                        "negative_stock", "Stock must not be negative."
+                        "negative_stock", "Stock must not be negative.",
+                        severity="warning",
                     ))
             except (InvalidOperation, ValueError):
                 issues.append(_issue(
                     row_number, stock_column, stock_text,
-                    "invalid_stock", "Stock must be a non-negative integer."
+                    "invalid_stock", "Stock must be a non-negative integer.",
+                    severity="warning",
                 ))
 
     return issues
