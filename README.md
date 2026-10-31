@@ -30,16 +30,17 @@ does not connect to WooCommerce, and never modifies the input file.
 
 Current checks:
 - Required SKU, product name, and price columns.
-- Empty SKUs and product names.
+- Empty SKUs and product names (errors).
 - Duplicate SKUs (case-insensitive, ignoring surrounding whitespace).
-- Non-numeric, non-finite, or negative prices.
-- Invalid, fractional, or negative stock values when a stock column exists.
+- Non-numeric, non-finite, or negative prices (errors).
+- Invalid, fractional, or negative stock values (warnings).
 - Missing required headers, duplicate headers, and malformed row widths.
 
-Supplier column names can be mapped through function arguments:
+Supplier column names can be mapped through function arguments. For example:
 
 ```python
 from src.catalog_csv_validator import validate_catalog_csv
+from src.catalog_csv_report import build_catalog_report, export_issues_csv
 
 issues = validate_catalog_csv(
     "supplier_catalog.csv",
@@ -50,16 +51,22 @@ issues = validate_catalog_csv(
     stock_column="Available",
 )
 
-for issue in issues:
-    print(issue)
+summary = build_catalog_report(total_products=120, issues=issues)
+print(summary)
+export_issues_csv(issues, "catalog_issues.csv")
 ```
 
-Each issue includes the CSV row number, field, original value, severity,
-machine-readable code, and explanation. The validator returns an empty list
-when no data-quality issues are found. Structural CSV errors (such as missing
-required columns) raise `ValueError`.
+The summary reports total products, products without errors, products with
+errors or warnings, and issue counts by severity. Stock issues are warnings:
+they can be reviewed separately without treating the entire product row as
+invalid for other fields.
 
-Example input: `examples/sample_catalog.csv`.
+The CSV report contains the row number, field, original value, severity,
+machine-readable code, and explanation. Existing report files are protected
+by default; pass `overwrite=True` explicitly to replace one.
+
+Structural CSV errors (such as missing required columns or malformed rows)
+raise `ValueError`. Example input: `examples/sample_catalog.csv`.
 
 ## Requirements
 
