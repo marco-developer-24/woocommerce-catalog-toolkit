@@ -23,6 +23,44 @@ The tool identifies empty or invalid URLs, HTTP errors, and successful responses
 
 > **Scope note:** the auditor checks response headers. It does not verify the actual image contents.
 
+## Catalog CSV Validator
+
+Validates supplier catalog files before any import or update. It runs offline,
+does not connect to WooCommerce, and never modifies the input file.
+
+Current checks:
+- Required SKU, product name, and price columns.
+- Empty SKUs and product names.
+- Duplicate SKUs (case-insensitive, ignoring surrounding whitespace).
+- Non-numeric, non-finite, or negative prices.
+- Invalid, fractional, or negative stock values when a stock column exists.
+- Missing required headers, duplicate headers, and malformed row widths.
+
+Supplier column names can be mapped through function arguments:
+
+```python
+from src.catalog_csv_validator import validate_catalog_csv
+
+issues = validate_catalog_csv(
+    "supplier_catalog.csv",
+    delimiter=",",
+    sku_column="ProductCode",
+    name_column="Description",
+    price_column="NetPrice",
+    stock_column="Available",
+)
+
+for issue in issues:
+    print(issue)
+```
+
+Each issue includes the CSV row number, field, original value, severity,
+machine-readable code, and explanation. The validator returns an empty list
+when no data-quality issues are found. Structural CSV errors (such as missing
+required columns) raise `ValueError`.
+
+Example input: `examples/sample_catalog.csv`.
+
 ## Requirements
 
 - Python 3.10 or newer
