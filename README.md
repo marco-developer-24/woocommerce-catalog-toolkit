@@ -2,20 +2,69 @@
 
 Small Python utilities for auditing WooCommerce catalog data and reducing avoidable mistakes during product-data preparation.
 
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Input](https://img.shields.io/badge/Input-CSV-3B82C4)
+![Status](https://img.shields.io/badge/Status-Early%20development-64748)
+
+---
+
 ## Tool 1: Image URL Auditor
 
 Checks image URLs listed in a CSV and reports HTTP status, content type, server-reported length when available, response time, and error details.
 
 It checks response headers; it does not verify the actual image contents.
 
-## Tool 2: New-product preflight
+## Tool 2: Catalog CSV Validator
+
+Validates supplier catalog files before any import or update. It runs offline, does not connect to WooCommerce, and never modifies the input file.
+
+### Current checks
+
+- Required SKU, product name, and price columns.
+- Empty SKUs and product names (errors).
+- Duplicate SKUs (case-insensitive, ignoring surrounding whitespace).
+- Non-numeric, non-finite, or negative prices (errors).
+- Invalid, fractional, or negative stock values (warnings).
+- Missing required headers, duplicate headers, and malformed row widths.
+
+Supplier column names can be mapped through function arguments.
+
+### Python example
+
+```python
+from src.catalog_csv_validator import validate_catalog_csv
+from src.catalog_csv_report import build_catalog_report, export_issues_csv
+
+issues = validate_catalog_csv(
+    "supplier_catalog.csv",
+    delimiter=",",
+    sku_column="ProductCode",
+    name_column="Description",
+    price_column="NetPrice",
+    stock_column="Available",
+)
+
+summary = build_catalog_report(total_products=120, issues=issues)
+print(summary)
+
+export_issues_csv(issues, "catalog_issues.csv")
+```
+
+The validator can also generate a summary and export detected issues to a CSV report.
+
+## Tool 3: New-product preflight
 
 Compares a supplier CSV with a current WooCommerce catalog CSV export and separates:
+
 - **New candidates**: a nonblank SKU appears exactly once in the supplier file and was not found in the catalog snapshot.
 - **Review required**: SKU already exists, repeats in the supplier file, or is blank.
 - **Full report**: every supplier row with its classification and reason.
 
-The preflight tool is a screening step only. It does not connect to WordPress, map arbitrary supplier columns into WooCommerce's import schema, or import/update/delete/publish products. Different SKUs can still describe the same product, and an outdated catalog export can produce false new candidates. Human review remains mandatory.
+### Scope and limitations
+
+The preflight tool is a screening step only. It does not connect to WordPress, map arbitrary supplier columns into WooCommerce's import schema, or import, update, delete, or publish products.
+
+Different SKUs can still describe the same product, and an outdated catalog export can produce false new candidates. Human review remains mandatory.
 
 ### Example
 
@@ -28,7 +77,7 @@ python src/new_product_preflight.py \
   --output-dir output/preflight-001
 ```
 
-When supplier and catalog headers/delimiters differ:
+When supplier and catalog headers or delimiters differ:
 
 ```bash
 python src/new_product_preflight.py \
@@ -61,7 +110,7 @@ The output directory must be new or empty. The tool refuses to overwrite files i
 7. In the native importer, leave the option to update existing products disabled for a new-only run. Review field mapping before starting.
 8. Check importer results, products created, SKUs, images, prices, stock, categories, variations, and existing products after import.
 
-Do not interpret “new candidate” as a guarantee that the product is new. This tool never guarantees that an import cannot affect existing data.
+Do not interpret "new candidate" as a guarantee that the product is new. This tool never guarantees that an import cannot affect existing data.
 
 ## Requirements
 
