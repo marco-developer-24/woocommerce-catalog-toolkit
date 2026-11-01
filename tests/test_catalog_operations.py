@@ -32,6 +32,17 @@ class AddProductsOperationTests(unittest.TestCase):
         self.assertEqual(len(result[BLOCKED]), 2)
         self.assertEqual(len(result[READY]), 0)
 
+    def test_custom_sku_column_is_preserved_in_operation_result(self):
+        row = {"ProductCode": "NEW-7", "Title": "Item", "Price": "7.50"}
+        result = prepare_add_products(
+            [row], [],
+            supplier_sku_column="ProductCode",
+            name_column="Title",
+            price_column="Price",
+        )
+        self.assertEqual(result[READY][0]["sku"], "NEW-7")
+        self.assertEqual(result[READY][0]["changes"]["SKU"], "NEW-7")
+
     def test_does_not_mutate_input_rows(self):
         row = {"SKU": "NEW", "Name": "Item", "Regular price": "10"}
         original = dict(row)
