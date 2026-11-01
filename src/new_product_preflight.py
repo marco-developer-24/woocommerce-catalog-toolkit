@@ -12,10 +12,28 @@ import shutil
 import tempfile
 from pathlib import Path
 
-STATUS_NEW = "NEW_CANDIDATE"
-STATUS_EXISTS = "SKU_ALREADY_EXISTS"
-STATUS_DUPLICATE = "DUPLICATE_SKU_IN_SOURCE"
-STATUS_MISSING = "MISSING_SKU"
+try:
+    from .catalog_matcher import (
+        STATUS_DUPLICATE_CATALOG,
+        STATUS_DUPLICATE_SOURCE,
+        STATUS_EXISTS,
+        STATUS_MISSING,
+        STATUS_NEW,
+        classify_catalog_rows,
+        normalize_sku as shared_normalize_sku,
+    )
+except ImportError:  # Support direct execution as a CLI script.
+    from catalog_matcher import (
+        STATUS_DUPLICATE_CATALOG,
+        STATUS_DUPLICATE_SOURCE,
+        STATUS_EXISTS,
+        STATUS_MISSING,
+        STATUS_NEW,
+        classify_catalog_rows,
+        normalize_sku as shared_normalize_sku,
+    )
+
+STATUS_DUPLICATE = STATUS_DUPLICATE_SOURCE
 
 
 def read_csv(path, delimiter, label):
@@ -48,52 +66,18 @@ def read_csv(path, delimiter, label):
 
 
 def normalize_sku(value):
-    """Normalize surrounding whitespace and case for identifier comparison."""
-    return (value or "").strip().casefold()
+    """Backward-compatible alias for the shared SKU normalizer."""
+    return shared_normalize_sku(value)
 
 
 def classify_rows(supplier_rows, catalog_rows, supplier_sku_column, catalog_sku_column):
-    """Classify supplier rows by SKU; preserve original row values."""
-    catalog_skus = {
-        normalize_sku(row.get(catalog_sku_column, ""))
-        for row in catalog_rows
-        if normalize_sku(row.get(catalog_sku_column, ""))
-    }
-
-    source_counts = {}
-    for row in supplier_rows:
-        sku = normalize_sku(row.get(supplier_sku_column, ""))
-        if sku:
-            source_counts[sku] = source_counts.get(sku, 0) + 1
-
-    classified = []
-    for row_number, row in enumerate(supplier_rows, start=2):
-        sku = normalize_sku(row.get(supplier_sku_column, ""))
-        if not sku:
-            status, reason = STATUS_MISSING, "SKU is blank; cannot safely identify product."
-        elif source_counts[sku] > 1:
-            status, reason = (
-                STATUS_DUPLICATE,
-                "SKU appears more than once in the supplier file; review all matching rows.",
-            )
-        elif sku in catalog_skus:
-            status, reason = (
-                STATUS_EXISTS,
-                "SKU already appears in the catalog export; not included as a new candidate.",
-            )
-        else:
-            status, reason = (
-                STATUS_NEW,
-                "SKU was not found in the supplied catalog export; verify before import.",
-            )
-
-        classified.append({
-            "row_number": row_number,
-            "row": row,
-            "status": status,
-            "reason": reason,
-        })
-    return classified
+    """Backward-compatible wrapper around the shared catalog matcher."""
+    return classify_catalog_rows(
+        supplier_rows,
+        catalog_rows,
+        supplier_sku_column,
+        catalog_sku_column,
+    )
 
 
 def write_csv_exclusive(path, headers, rows, delimiter):
@@ -256,9 +240,13 @@ def main():
              "_PREFLIGHT_STATUS": item["status"], "_PREFLIGHT_REASON": item["reason"]}
             for item in classified
         ]
+        statuses = (
+            STATUS_NEW, STATUS_EXISTS, STATUS_DUPLICATE,
+            STATUS_DUPLICATE_CATALOG, STATUS_MISSING,
+        )
         counts = {
             status: sum(item["status"] == status for item in classified)
-            for status in (STATUS_NEW, STATUS_EXISTS, STATUS_DUPLICATE, STATUS_MISSING)
+            for status in statuses
         }
         summary = [
             "WooCommerce Catalog Toolkit — supplier preflight",
@@ -270,6 +258,7 @@ def main():
             f"New candidates (not confirmed): {counts[STATUS_NEW]}",
             f"SKU already in catalog: {counts[STATUS_EXISTS]}",
             f"Duplicate SKU in supplier file: {counts[STATUS_DUPLICATE]}",
+            f"Duplicate SKU in catalog export: {counts[STATUS_DUPLICATE_CATALOG]}",
             f"Missing SKU: {counts[STATUS_MISSING]}",
             "",
             "IMPORTANT:",
