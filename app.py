@@ -202,7 +202,7 @@ with st.container(border=True):
 
     st.caption(f"Archivo: {uploaded_file.name} · {total_rows} filas de productos · {len(headers)} columnas útiles")
     st.markdown("**Vista previa**")
-    st.dataframe(preview, use_container_width=True, hide_index=True)
+    st.table(preview)
 
     aliases = {
         "sku": ("SKU", "sku", "CODIGO", "CÓDIGO", "PRODUCT_CODE", "CODE"),
@@ -269,43 +269,47 @@ with st.container(border=True):
         mapping = current_mapping
         temp_path = None
         try:
-                with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary:
-                    temporary.write(file_bytes)
-                    temp_path = Path(temporary.name)
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary:
+                temporary.write(file_bytes)
+                temp_path = Path(temporary.name)
 
-                issues = validate_catalog_csv(
-                    temp_path,
-                    delimiter=delimiter,
-                    sku_column=mapping["sku"],
-                    name_column=mapping["name"],
-                    price_column=mapping["price"],
-                    stock_column=mapping["stock"],
-                )
-                report = build_catalog_report(total_rows, issues)
-                issues_csv = make_issues_csv(issues)
-                file_hash = hashlib.sha256(file_bytes).hexdigest()
-                summary = make_summary(
-                    uploaded_file.name,
-                    file_hash,
-                    delimiter,
-                    mapping,
-                    report,
-                    ignored_empty_columns,
-                )
-                issues_text = make_issues_text(issues)
-                diagnostic_text = summary + "\nDetalle de incidencias\n======================\n" + issues_text
-                archive = make_report_zip(issues_csv, summary)
+            issues = validate_catalog_csv(
+                temp_path,
+                delimiter=delimiter,
+                sku_column=mapping["sku"],
+                name_column=mapping["name"],
+                price_column=mapping["price"],
+                stock_column=mapping["stock"],
+            )
+            report = build_catalog_report(total_rows, issues)
+            issues_csv = make_issues_csv(issues)
+            file_hash = hashlib.sha256(file_bytes).hexdigest()
+            summary = make_summary(
+                uploaded_file.name,
+                file_hash,
+                delimiter,
+                mapping,
+                report,
+                ignored_empty_columns,
+            )
+            issues_text = make_issues_text(issues)
+            diagnostic_text = (
+                summary
+                + "\nDetalle de incidencias\n======================\n"
+                + issues_text
+            )
+            archive = make_report_zip(issues_csv, summary)
 
-                st.session_state["catalog_validation"] = {
-                    "issues": issues,
-                    "report": report,
-                    "issues_csv": issues_csv,
-                    "summary": summary,
-                    "issues_text": issues_text,
-                    "diagnostic_text": diagnostic_text,
-                    "archive": archive,
-                    "signature": current_signature,
-                }
+            st.session_state["catalog_validation"] = {
+                "issues": issues,
+                "report": report,
+                "issues_csv": issues_csv,
+                "summary": summary,
+                "issues_text": issues_text,
+                "diagnostic_text": diagnostic_text,
+                "archive": archive,
+                "signature": current_signature,
+            }
         except (OSError, UnicodeError, csv.Error, ValueError) as exc:
             st.error(f"No se pudo completar la validación: {exc}")
             st.session_state.pop("catalog_validation", None)
@@ -334,7 +338,7 @@ if result and result.get("signature") == current_signature:
 
     if result["issues"]:
         st.subheader("Problemas detectados")
-        st.dataframe(result["issues"], use_container_width=True, hide_index=True)
+        st.table(result["issues"])
     else:
         st.info("El CSV no presenta incidencias según las reglas actuales.")
 
