@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import tempfile
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -79,13 +80,48 @@ def make_issues_csv(issues):
     return ("\ufeff" + output.getvalue()).encode("utf-8")
 
 
-def make_summary(filename, file_hash, delimiter, mapping, report):
+def make_issues_text(issues):
+    """Return a readable, copy-friendly representation of all validation issues."""
+    if not issues:
+        return "No se detectaron incidencias según las reglas actuales."
+
+    blocks = []
+    for issue in issues:
+        blocks.append(
+            f"Fila: {issue['row_number']}\n"
+            f"Campo: {issue['field']}\n"
+            f"Severidad: {issue['severity']}\n"
+            f"Código: {issue['code']}\n"
+            f"Valor: {issue['value']}\n"
+            f"Detalle: {issue['message']}"
+        )
+    return "\n\n".join(blocks)
+
+
+def normalize_header(value):
+    """Normalize supplier headers for tolerant, accent-insensitive matching."""
+    normalized = unicodedata.normalize("NFKD", value)
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    return "".join(char.casefold() for char in normalized if char.isalnum())
+
+
+def suggest_column(headers, aliases):
+    """Suggest a header using normalized exact matches, without guessing loosely."""
+    normalized_aliases = {normalize_header(alias) for alias in aliases}
+    for header in headers:
+        if normalize_header(header) in normalized_aliases:
+            return headers.index(header)
+    return 0
+
+
+def make_summary(filename, file_hash, delimiter, mapping, report, ignored_empty_columns=0):
     lines = [
         "WooCommerce Catalog Toolkit — Catalog CSV Validator",
         "",
         f"Archivo analizado: {filename}",
         f"SHA-256: {file_hash}",
         f"Delimitador: {delimiter!r}",
+        f"Columnas vacías sin encabezado ignoradas: {ignored_empty_columns}",
         f"Columna SKU: {mapping['sku']}",
         f"Columna nombre: {mapping['name']}",
         f"Columna precio: {mapping['price']}",
@@ -175,12 +211,8 @@ with st.container(border=True):
         "stock": ("STOCK", "QUANTITY", "CANTIDAD", "EXISTENCIA"),
     }
 
-    def default_column(kind, required=True):
-        candidates = aliases[kind]
-        match = next((header for candidate in candidates for header in headers if header.casefold() == candidate.casefold()), None)
-        if match:
-            return headers.index(match)
-        return 0 if required else 0
+    def default_column(kind):
+        return suggest_column(headers, aliases[kind])
 
     st.markdown("**Asignación de columnas**")
     st.caption("Confirmá qué columna representa cada dato. El stock es opcional.")
@@ -201,14 +233,24 @@ with st.container(border=True):
             index=stock_options.index(stock_default) if stock_default else 0,
             key="stock_column",
         )
-    st.caption("Cada campo obligatorio debe apuntar a una columna diferente.")
-
     current_mapping = {
         "sku": sku_column,
         "name": name_column,
         "price": price_column,
         "stock": None if stock_column == "— No validar stock —" else stock_column,
     }
+    required_columns = [current_mapping["sku"], current_mapping["name"], current_mapping["price"]]
+    mapping_error = None
+    if len(set(required_columns)) != len(required_columns):
+        mapping_error = "SKU, nombre y precio deben estar asignados a columnas diferentes."
+    elif current_mapping["stock"] in required_columns:
+        mapping_error = "La columna de stock debe ser distinta de SKU, nombre y precio."
+
+    if mapping_error:
+        st.error(mapping_error)
+    else:
+        st.caption("Asignación válida: cada campo utiliza una columna diferente.")
+
     current_signature = (
         hashlib.sha256(file_bytes).hexdigest(),
         delimiter,
@@ -218,16 +260,15 @@ with st.container(border=True):
         current_mapping["stock"],
     )
 
-    if st.button("Analizar catálogo", type="primary", use_container_width=True):
+    if st.button(
+        "Analizar catálogo",
+        type="primary",
+        use_container_width=True,
+        disabled=bool(mapping_error),
+    ):
         mapping = current_mapping
-        required_columns = [mapping["sku"], mapping["name"], mapping["price"]]
-        if len(set(required_columns)) != len(required_columns):
-            st.error("SKU, nombre y precio deben estar asignados a columnas diferentes.")
-        elif mapping["stock"] in required_columns:
-            st.error("La columna de stock debe ser distinta de SKU, nombre y precio.")
-        else:
-            temp_path = None
-            try:
+        temp_path = None
+        try:
                 with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary:
                     temporary.write(file_bytes)
                     temp_path = Path(temporary.name)
@@ -243,7 +284,16 @@ with st.container(border=True):
                 report = build_catalog_report(total_rows, issues)
                 issues_csv = make_issues_csv(issues)
                 file_hash = hashlib.sha256(file_bytes).hexdigest()
-                summary = make_summary(uploaded_file.name, file_hash, delimiter, mapping, report)
+                summary = make_summary(
+                    uploaded_file.name,
+                    file_hash,
+                    delimiter,
+                    mapping,
+                    report,
+                    ignored_empty_columns,
+                )
+                issues_text = make_issues_text(issues)
+                diagnostic_text = summary + "\nDetalle de incidencias\n======================\n" + issues_text
                 archive = make_report_zip(issues_csv, summary)
 
                 st.session_state["catalog_validation"] = {
@@ -251,15 +301,17 @@ with st.container(border=True):
                     "report": report,
                     "issues_csv": issues_csv,
                     "summary": summary,
+                    "issues_text": issues_text,
+                    "diagnostic_text": diagnostic_text,
                     "archive": archive,
                     "signature": current_signature,
                 }
-            except (OSError, UnicodeError, csv.Error, ValueError) as exc:
-                st.error(f"No se pudo completar la validación: {exc}")
-                st.session_state.pop("catalog_validation", None)
-            finally:
-                if temp_path is not None:
-                    temp_path.unlink(missing_ok=True)
+        except (OSError, UnicodeError, csv.Error, ValueError) as exc:
+            st.error(f"No se pudo completar la validación: {exc}")
+            st.session_state.pop("catalog_validation", None)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
 
 result = st.session_state.get("catalog_validation")
 if result and result.get("signature") == current_signature:
@@ -285,6 +337,15 @@ if result and result.get("signature") == current_signature:
         st.dataframe(result["issues"], use_container_width=True, hide_index=True)
     else:
         st.info("El CSV no presenta incidencias según las reglas actuales.")
+
+    st.subheader("Copiar resultados")
+    st.caption("Los bloques incluyen un control de copia en su esquina superior derecha.")
+    with st.expander("Copiar resumen", expanded=False):
+        st.code(result["summary"], language="text")
+    with st.expander("Copiar incidencias", expanded=False):
+        st.code(result["issues_text"], language="text")
+    with st.expander("Copiar diagnóstico completo", expanded=False):
+        st.code(result["diagnostic_text"], language="text")
 
     st.subheader("Descargar resultados")
     download_cols = st.columns(2)
