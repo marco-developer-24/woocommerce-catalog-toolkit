@@ -12,14 +12,26 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from catalog_matcher import (
-    STATUS_DUPLICATE_CATALOG,
-    STATUS_DUPLICATE_SOURCE,
-    STATUS_EXISTS,
-    STATUS_MISSING,
-    STATUS_NEW,
-    classify_catalog_rows,
-)
+try:
+    from .catalog_matcher import (
+        STATUS_DUPLICATE_CATALOG,
+        STATUS_DUPLICATE_SOURCE,
+        STATUS_EXISTS,
+        STATUS_MISSING,
+        STATUS_NEW,
+        classify_catalog_rows,
+        normalize_sku as shared_normalize_sku,
+    )
+except ImportError:  # Support direct execution as a CLI script.
+    from catalog_matcher import (
+        STATUS_DUPLICATE_CATALOG,
+        STATUS_DUPLICATE_SOURCE,
+        STATUS_EXISTS,
+        STATUS_MISSING,
+        STATUS_NEW,
+        classify_catalog_rows,
+        normalize_sku as shared_normalize_sku,
+    )
 
 STATUS_DUPLICATE = STATUS_DUPLICATE_SOURCE
 
@@ -55,7 +67,6 @@ def read_csv(path, delimiter, label):
 
 def normalize_sku(value):
     """Backward-compatible alias for the shared SKU normalizer."""
-    from catalog_matcher import normalize_sku as shared_normalize_sku
     return shared_normalize_sku(value)
 
 
