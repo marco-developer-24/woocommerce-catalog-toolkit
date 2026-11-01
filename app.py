@@ -33,24 +33,42 @@ def detect_delimiter(sample):
 def read_csv_preview(file_bytes, delimiter, limit=10):
     """Read CSV headers and a small preview without changing uploaded bytes."""
     text = file_bytes.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
-    headers = reader.fieldnames
-    if not headers:
+    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+    raw_headers = next(reader, None)
+    if not raw_headers:
         raise ValueError("El archivo está vacío o no contiene encabezados.")
-    if any(header is None or not header.strip() for header in headers):
-        raise ValueError("El CSV contiene un nombre de columna vacío.")
+
+    blank_positions = [
+        index for index, header in enumerate(raw_headers) if not header.strip()
+    ]
+    headers = [header for header in raw_headers if header.strip()]
+    if not headers:
+        raise ValueError("El CSV no contiene columnas con encabezado.")
     if len(headers) != len(set(headers)):
         raise ValueError("El CSV contiene nombres de columna duplicados.")
 
     preview = []
     total_rows = 0
-    for row in reader:
-        if None in row or any(value is None for value in row.values()):
-            raise ValueError(f"El CSV tiene una fila con distinta cantidad de columnas (fila {total_rows + 2}).")
+    for row_number, values in enumerate(reader, start=2):
+        if len(values) != len(raw_headers):
+            raise ValueError(
+                f"El CSV tiene una fila con distinta cantidad de columnas (fila {row_number})."
+            )
+        for position in blank_positions:
+            if values[position].strip():
+                raise ValueError(
+                    f"La columna {position + 1} no tiene encabezado, "
+                    f"pero contiene datos en la fila {row_number}."
+                )
+        row = {
+            header: values[index]
+            for index, header in enumerate(raw_headers)
+            if header.strip()
+        }
         total_rows += 1
         if len(preview) < limit:
             preview.append(row)
-    return headers, preview, total_rows
+    return headers, preview, total_rows, len(blank_positions)
 
 
 def make_issues_csv(issues):
@@ -135,12 +153,18 @@ with st.container(border=True):
     delimiter = DELIMITER_OPTIONS[selected_label]
 
     try:
-        headers, preview, total_rows = read_csv_preview(file_bytes, delimiter)
+        headers, preview, total_rows, ignored_empty_columns = read_csv_preview(file_bytes, delimiter)
     except (UnicodeDecodeError, csv.Error, ValueError) as exc:
         st.error(f"No se pudo interpretar el CSV: {exc}")
         st.stop()
 
-    st.caption(f"Archivo: {uploaded_file.name} · {total_rows} filas de productos · {len(headers)} columnas")
+    if ignored_empty_columns:
+        st.warning(
+            f"Se detectaron {ignored_empty_columns} columna(s) sin encabezado y completamente vacía(s). "
+            "Se ignorarán durante el análisis; el archivo original no se modifica."
+        )
+
+    st.caption(f"Archivo: {uploaded_file.name} · {total_rows} filas de productos · {len(headers)} columnas útiles")
     st.markdown("**Vista previa**")
     st.dataframe(preview, use_container_width=True, hide_index=True)
 
