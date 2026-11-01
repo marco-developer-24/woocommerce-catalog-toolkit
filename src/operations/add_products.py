@@ -5,7 +5,6 @@ from src.catalog_matcher import (
     STATUS_DUPLICATE_SOURCE,
     STATUS_EXISTS,
     STATUS_MISSING,
-    STATUS_NEW,
     classify_catalog_rows,
 )
 from .common import BLOCKED, EXCLUDED, READY, build_result, decimal_to_text, operation_item, parse_non_negative_decimal
@@ -33,10 +32,10 @@ def prepare_add_products(
     for match in classified:
         row = match["row"]
         if match["status"] == STATUS_EXISTS:
-            items.append(operation_item(match, EXCLUDED, "SKU already exists; add operation will not overwrite it."))
+            items.append(operation_item(match, EXCLUDED, "SKU already exists; add operation will not overwrite it.", sku_column=supplier_sku_column))
             continue
         if match["status"] in {STATUS_DUPLICATE_SOURCE, STATUS_DUPLICATE_CATALOG, STATUS_MISSING}:
-            items.append(operation_item(match, BLOCKED, match["reason"]))
+            items.append(operation_item(match, BLOCKED, match["reason"], sku_column=supplier_sku_column))
             continue
         name = str(row.get(name_column, "") or "").strip()
         price = parse_non_negative_decimal(row.get(price_column, ""))
@@ -47,7 +46,7 @@ def prepare_add_products(
         if price is None:
             problems.append(f"Missing or invalid non-negative price in {price_column!r}.")
         if problems:
-            items.append(operation_item(match, BLOCKED, " ".join(problems)))
+            items.append(operation_item(match, BLOCKED, " ".join(problems), sku_column=supplier_sku_column))
             continue
         items.append(operation_item(
             match,
@@ -60,5 +59,6 @@ def prepare_add_products(
                 "Published": "0",
                 "Type": "simple",
             },
+            sku_column=supplier_sku_column,
         ))
     return build_result(items)
