@@ -202,7 +202,81 @@ with st.container(border=True):
 
     st.caption(f"Archivo: {uploaded_file.name} · {total_rows} filas de productos · {len(headers)} columnas útiles")
     st.markdown("**Vista previa**")
-    st.table(preview)
+    st.caption(
+        "Vista compacta para inspeccionar la estructura. Los valores largos se recortan "
+        "solo en pantalla; el análisis utiliza siempre el contenido original."
+    )
+
+    preview_limit = st.selectbox(
+        "Filas para mostrar",
+        options=[5, 10, 20],
+        index=1,
+        key="preview_row_limit",
+    )
+    visible_default = []
+    for candidate in ("SKU", "Código", "CODIGO", "Nombre", "Descripción", "Precio", "Price"):
+        match = next((header for header in headers if header.casefold() == candidate.casefold()), None)
+        if match and match not in visible_default:
+            visible_default.append(match)
+    for header in headers:
+        if len(visible_default) >= min(6, len(headers)):
+            break
+        if header not in visible_default:
+            visible_default.append(header)
+
+    visible_columns = st.multiselect(
+        "Columnas visibles",
+        options=headers,
+        default=visible_default,
+        key="preview_visible_columns",
+        help="Elegí qué columnas querés inspeccionar. Podés agregar o quitar columnas cuando lo necesites.",
+    )
+    if not visible_columns:
+        st.info("Seleccioná al menos una columna para mostrar la vista previa.")
+    else:
+        st.caption(f"Mostrando {len(visible_columns)} de {len(headers)} columnas.")
+        compact_preview = [
+            {
+                header: (
+                    str(row.get(header, ""))
+                    if len(str(row.get(header, ""))) <= 56
+                    else str(row.get(header, ""))[:53] + "..."
+                )
+                for header in visible_columns
+            }
+            for row in preview[:preview_limit]
+        ]
+        column_config = {
+            header: st.column_config.TextColumn(header, width="medium")
+            for header in visible_columns
+        }
+        st.dataframe(
+            compact_preview,
+            column_order=visible_columns,
+            column_config=column_config,
+            hide_index=True,
+            use_container_width=True,
+            height=360,
+        )
+
+        if preview:
+            st.markdown("**Inspeccionar un valor completo**")
+            detail_col1, detail_col2 = st.columns([1, 2])
+            with detail_col1:
+                detail_row = st.selectbox(
+                    "Fila de la vista previa",
+                    options=list(range(len(preview))),
+                    format_func=lambda index: f"Fila {index + 1} (CSV: {index + 2})",
+                    key="preview_detail_row",
+                )
+            with detail_col2:
+                detail_column = st.selectbox(
+                    "Columna",
+                    options=headers,
+                    key="preview_detail_column",
+                )
+            full_value = str(preview[detail_row].get(detail_column, ""))
+            st.code(full_value if full_value else "(vacío)", language="text")
 
     aliases = {
         "sku": ("SKU", "sku", "CODIGO", "CÓDIGO", "PRODUCT_CODE", "CODE"),
