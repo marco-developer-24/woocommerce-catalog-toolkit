@@ -92,19 +92,19 @@ class TestCatalogCsvValidator(unittest.TestCase):
 
     def test_ignores_trailing_empty_unnamed_column(self):
         path = self.write_csv(
-            "SKU;PRODUCT_NAME;PRICE;\\nA;Widget;10;\\n"
+            "SKU;PRODUCT_NAME;PRICE;\nA;Widget;10;\n"
         )
         self.assertEqual(validate_catalog_csv(path), [])
 
     def test_ignores_empty_unnamed_column_between_named_columns(self):
         path = self.write_csv(
-            "SKU;;PRODUCT_NAME;PRICE\\nA;;Widget;10\\n"
+            "SKU;;PRODUCT_NAME;PRICE\nA;;Widget;10\n"
         )
         self.assertEqual(validate_catalog_csv(path), [])
 
     def test_rejects_unnamed_column_when_it_contains_data(self):
         path = self.write_csv(
-            "SKU;;PRODUCT_NAME;PRICE\\nA;unexpected;Widget;10\\n"
+            "SKU;;PRODUCT_NAME;PRICE\nA;unexpected;Widget;10\n"
         )
         with self.assertRaisesRegex(ValueError, "position 2.*row 2"):
             validate_catalog_csv(path)
