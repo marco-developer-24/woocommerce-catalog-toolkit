@@ -45,9 +45,9 @@ python src/new_product_preflight.py \
 - `new_products.csv`: rows whose nonblank SKU occurs exactly once in the supplier file and was not found in the catalog export.
 - `review_products.csv`: rows with missing SKU, repeated supplier SKU, or SKU already found in the catalog export.
 - `preflight_report.csv`: all supplier rows with classification and reason.
-- `summary.txt`: counts and important caveats.
+- `summary.txt`: counts, important caveats, UTC execution time, Python version, input SHA-256 hashes, configured SKU columns, delimiters, and supplier row count.
 
-The tool refuses to overwrite files in a non-empty output directory.
+The tool refuses to overwrite files in a non-empty output directory. SHA-256 hashes are calculated from the exact input bytes parsed, so the report can identify the precise supplier and catalog snapshots used.
 
 ## Important limitations
 

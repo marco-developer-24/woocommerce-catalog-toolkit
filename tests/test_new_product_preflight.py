@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.new_product_preflight import write_preflight_outputs
+from src.new_product_preflight import read_csv, write_preflight_outputs
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "src" / "new_product_preflight.py"
@@ -136,6 +136,37 @@ class NewProductPreflightTests(unittest.TestCase):
 
             self.assertFalse(output.exists())
             self.assertEqual(list(root.glob(".output.tmp-*")), [])
+
+
+    def test_summary_records_hashes_and_run_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            supplier = root / "supplier.csv"
+            catalog = root / "catalog.csv"
+            output = root / "output"
+            write_csv(supplier, ["Code", "Name"], [{"Code": "A-1", "Name": "Item"}], delimiter=",")
+            write_csv(catalog, ["SKU"], [{"SKU": "B-1"}], delimiter=";")
+
+            result = self.run_preflight(
+                supplier, catalog, output,
+                "--supplier-sku-column", "Code",
+                "--catalog-sku-column", "SKU",
+                "--supplier-delimiter", ",",
+                "--catalog-delimiter", ";",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            summary = (output / "summary.txt").read_text(encoding="utf-8")
+            _, _, supplier_hash = read_csv(supplier, ",", "Supplier CSV")
+            _, _, catalog_hash = read_csv(catalog, ";", "Catalog CSV")
+            self.assertIn(f"Supplier SHA-256: {supplier_hash}", summary)
+            self.assertIn(f"Catalog SHA-256: {catalog_hash}", summary)
+            self.assertIn("Supplier SKU column: Code", summary)
+            self.assertIn("Catalog SKU column: SKU", summary)
+            self.assertIn("Supplier delimiter: ','", summary)
+            self.assertIn("Catalog delimiter: ';'", summary)
+            self.assertIn("Python version:", summary)
+            self.assertIn("Executed at (UTC):", summary)
 
 
 if __name__ == "__main__":

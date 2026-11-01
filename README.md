@@ -90,14 +90,14 @@ python src/new_product_preflight.py \
   --output-dir output/preflight-002
 ```
 
-The output directory must be new or empty. The tool refuses to overwrite files in a non-empty directory.
+The output directory must be new or empty. The tool refuses to overwrite files in a non-empty directory. The summary records SHA-256 hashes of the exact input bytes parsed, the UTC execution time, Python version, SKU columns, delimiters, and supplier row count.
 
 ### Output files
 
 - `new_products.csv` — candidate rows, retaining supplier columns and values.
 - `review_products.csv` — rows needing review, with `_PREFLIGHT_ROW`, `_PREFLIGHT_STATUS`, and `_PREFLIGHT_REASON`.
 - `preflight_report.csv` — all supplier rows with the same review metadata.
-- `summary.txt` — row counts and safety notes.
+- `summary.txt` — row counts, safety notes, execution details, input SHA-256 hashes, and the SKU/delimiter configuration used.
 
 ### Safe import procedure
 
