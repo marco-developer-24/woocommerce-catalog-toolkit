@@ -179,13 +179,23 @@ with st.container(border=True):
         )
     st.caption("Cada campo obligatorio debe apuntar a una columna diferente.")
 
+    current_mapping = {
+        "sku": sku_column,
+        "name": name_column,
+        "price": price_column,
+        "stock": None if stock_column == "— No validar stock —" else stock_column,
+    }
+    current_signature = (
+        hashlib.sha256(file_bytes).hexdigest(),
+        delimiter,
+        current_mapping["sku"],
+        current_mapping["name"],
+        current_mapping["price"],
+        current_mapping["stock"],
+    )
+
     if st.button("Analizar catálogo", type="primary", use_container_width=True):
-        mapping = {
-            "sku": sku_column,
-            "name": name_column,
-            "price": price_column,
-            "stock": None if stock_column == "— No validar stock —" else stock_column,
-        }
+        mapping = current_mapping
         required_columns = [mapping["sku"], mapping["name"], mapping["price"]]
         if len(set(required_columns)) != len(required_columns):
             st.error("SKU, nombre y precio deben estar asignados a columnas diferentes.")
@@ -218,6 +228,7 @@ with st.container(border=True):
                     "issues_csv": issues_csv,
                     "summary": summary,
                     "archive": archive,
+                    "signature": current_signature,
                 }
             except (OSError, UnicodeError, csv.Error, ValueError) as exc:
                 st.error(f"No se pudo completar la validación: {exc}")
@@ -227,7 +238,7 @@ with st.container(border=True):
                     temp_path.unlink(missing_ok=True)
 
 result = st.session_state.get("catalog_validation")
-if result:
+if result and result.get("signature") == current_signature:
     st.divider()
     st.header("Resultado del análisis")
     report = result["report"]
@@ -269,6 +280,9 @@ if result:
     )
     with st.expander("Ver resumen del análisis"):
         st.code(result["summary"], language="text")
+
+elif result:
+    st.info("Cambiaste el archivo o la configuración. Ejecutá nuevamente el análisis para generar resultados actualizados.")
 
 st.divider()
 st.caption("Versión inicial de la interfaz · Análisis local · Sin conexión a WooCommerce · Sin escritura sobre el archivo fuente")
