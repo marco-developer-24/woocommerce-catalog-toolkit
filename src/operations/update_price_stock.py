@@ -3,7 +3,6 @@
 from src.catalog_matcher import (
     STATUS_DUPLICATE_CATALOG,
     STATUS_DUPLICATE_SOURCE,
-    STATUS_EXISTS,
     STATUS_MISSING,
     STATUS_NEW,
     classify_catalog_rows,
@@ -44,10 +43,10 @@ def prepare_price_stock_updates(
     items = []
     for match in classified:
         if match["status"] in {STATUS_DUPLICATE_SOURCE, STATUS_DUPLICATE_CATALOG, STATUS_MISSING}:
-            items.append(operation_item(match, BLOCKED, match["reason"]))
+            items.append(operation_item(match, BLOCKED, match["reason"], sku_column=supplier_sku_column))
             continue
         if match["status"] == STATUS_NEW:
-            items.append(operation_item(match, EXCLUDED, "SKU was not found in the WooCommerce catalog; update operation skips new products."))
+            items.append(operation_item(match, EXCLUDED, "SKU was not found in the WooCommerce catalog; update operation skips new products.", sku_column=supplier_sku_column))
             continue
 
         catalog_row = catalog_by_row[match["catalog_row_numbers"][0]]
@@ -88,5 +87,5 @@ def prepare_price_stock_updates(
         else:
             status = READY
             reason = "Unique existing SKU; only authorized price/stock fields are prepared."
-        items.append(operation_item(match, status, reason, changes))
+        items.append(operation_item(match, status, reason, changes, sku_column=supplier_sku_column))
     return build_result(items)
