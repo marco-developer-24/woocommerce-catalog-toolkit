@@ -21,26 +21,47 @@ def _read_rows(input_path, delimiter):
         raise ValueError("Delimiter must be exactly one character.")
 
     with open(input_path, encoding="utf-8-sig", newline="") as source:
-        reader = csv.DictReader(source, delimiter=delimiter, strict=True)
-        headers = reader.fieldnames
+        reader = csv.reader(source, delimiter=delimiter, strict=True)
+        raw_headers = next(reader, None)
 
-        if not headers:
+        if not raw_headers:
             raise ValueError("Input CSV is empty or has no header row.")
-        if any(header is None or not header.strip() for header in headers):
-            raise ValueError("CSV contains an empty column name.")
+
+        blank_positions = [
+            index for index, header in enumerate(raw_headers)
+            if not header.strip()
+        ]
+        headers = [
+            header for header in raw_headers if header.strip()
+        ]
+        if not headers:
+            raise ValueError("CSV has no named columns.")
         if len(headers) != len(set(headers)):
             raise ValueError("CSV contains duplicate column names.")
 
         rows = []
-        for row_number, row in enumerate(reader, start=2):
-            if None in row:
-                raise ValueError(
-                    f"CSV row {row_number} has more fields than the header."
-                )
-            if any(value is None for value in row.values()):
+        for row_number, values in enumerate(reader, start=2):
+            if len(values) != len(raw_headers):
+                if len(values) > len(raw_headers):
+                    raise ValueError(
+                        f"CSV row {row_number} has more fields than the header."
+                    )
                 raise ValueError(
                     f"CSV row {row_number} has fewer fields than the header."
                 )
+
+            for position in blank_positions:
+                if values[position].strip():
+                    raise ValueError(
+                        f"CSV column at position {position + 1} has no header "
+                        f"but contains data on row {row_number}."
+                    )
+
+            row = {
+                header: values[index]
+                for index, header in enumerate(raw_headers)
+                if header.strip()
+            }
             rows.append((row_number, row))
 
     return headers, rows
