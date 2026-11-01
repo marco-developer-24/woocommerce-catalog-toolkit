@@ -112,6 +112,25 @@ The output directory must be new or empty. The tool refuses to overwrite files i
 
 Do not interpret "new candidate" as a guarantee that the product is new. This tool never guarantees that an import cannot affect existing data.
 
+## Local graphical interface (first version)
+
+The repository includes an optional Streamlit interface for the Catalog CSV Validator. It lets you upload a supplier CSV, inspect a preview, choose the delimiter, map supplier columns, run the existing validation rules, and download the issue CSV or a ZIP report.
+
+The interface runs locally and does not connect to WordPress or WooCommerce. It does not import, update, delete, or publish products. The uploaded source file is kept unchanged.
+
+### Run the interface
+
+Python 3.10+ is required.
+
+```bash
+python -m pip install -r requirements-ui.txt
+python -m streamlit run app.py
+```
+
+Open the local URL printed by Streamlit in your browser. The first version accepts UTF-8 CSV files (with or without BOM) up to 50 MB.
+
+The Streamlit dependency is kept separate from the core toolkit. CLI users and automated tests do not need to install it.
+
 ## Requirements
 
 - Python 3.10+
