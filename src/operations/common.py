@@ -30,11 +30,11 @@ def decimal_to_text(value):
     return rendered or "0"
 
 
-def operation_item(classification, status, reason, changes=None):
+def operation_item(classification, status, reason, changes=None, sku_column="SKU"):
     return {
         "row_number": classification["row_number"],
         "row": dict(classification["row"]),
-        "sku": classification["row"].get("SKU", ""),
+        "sku": classification["row"].get(sku_column, ""),
         "normalized_sku": classification["normalized_sku"],
         "match_status": classification["status"],
         "status": status,
