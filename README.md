@@ -24,9 +24,9 @@ python src/image_url_auditor.py \\
   --summary-output image_audit_summary.txt
 \`\`\`
 
-The CSV report keeps the configured SKU, product-name, and image-URL columns and appends the per-URL audit fields. The console always displays an aggregate summary with counts for \`OK\`, \`CHECK\`, \`HTTP_ERROR\`, \`CONNECTION_ERROR\`, and \`INVALID_URL\`, plus the success rate.
+The CSV report keeps the configured SKU, product-name, and image-URL columns and appends the per-URL audit fields. The console always displays an aggregate summary with counts for `OK`, `CHECK`, `HTTP_ERROR`, `CONNECTION_ERROR`, `INVALID_URL`, and `UNKNOWN`, plus the success rate. Unexpected or unrecognized result values are grouped under `UNKNOWN`, so the result counts always add up to the total number of audited URLs.
 
-The optional \`--summary-output\` writes the same aggregate summary to a separate plain-text file. Existing output files are never overwritten. The success rate is the percentage of audited URLs classified as \`OK\`; a \`CHECK\` response is not counted as a valid image.
+The optional `--summary-output` writes the same aggregate summary to a separate plain-text file. Existing output files are never overwritten. The success rate is the percentage of audited URLs classified as `OK`; a `CHECK` response is not counted as a valid image. The CSV report is published before the optional text summary, so a summary-publication error can leave the CSV report available even when the command exits with an error.
 
 ## Tool 2: Catalog CSV Validator
 
