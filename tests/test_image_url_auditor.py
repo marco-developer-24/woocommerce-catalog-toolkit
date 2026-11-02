@@ -225,5 +225,60 @@ class TestCheckImage(unittest.TestCase):
                 self.assertIn(f"HTTP {status}", result["error"])
 
 
+class TestBuildAuditSummary(unittest.TestCase):
+
+    def test_counts_all_known_results_and_calculates_ok_rate(self):
+        results = [
+            {"result": "OK"},
+            {"result": "OK"},
+            {"result": "CHECK"},
+            {"result": "HTTP_ERROR"},
+            {"result": "CONNECTION_ERROR"},
+            {"result": "INVALID_URL"},
+        ]
+
+        summary = image_url_auditor.build_audit_summary(results)
+
+        self.assertEqual(summary["total"], 6)
+        self.assertEqual(
+            summary["counts"],
+            {
+                "OK": 2,
+                "CHECK": 1,
+                "HTTP_ERROR": 1,
+                "CONNECTION_ERROR": 1,
+                "INVALID_URL": 1,
+            },
+        )
+        self.assertEqual(summary["success_rate"], 33.33)
+
+    def test_empty_results_have_zero_success_rate(self):
+        summary = image_url_auditor.build_audit_summary([])
+
+        self.assertEqual(summary["total"], 0)
+        self.assertEqual(summary["success_rate"], 0.0)
+        self.assertTrue(all(value == 0 for value in summary["counts"].values()))
+
+    def test_unknown_result_is_included_in_total_but_not_known_buckets(self):
+        summary = image_url_auditor.build_audit_summary(
+            [{"result": "OK"}, {"result": "UNEXPECTED"}]
+        )
+
+        self.assertEqual(summary["total"], 2)
+        self.assertEqual(summary["counts"]["OK"], 1)
+        self.assertEqual(summary["success_rate"], 50.0)
+
+    def test_formatted_summary_contains_counts_and_rate(self):
+        summary = image_url_auditor.build_audit_summary(
+            [{"result": "OK"}, {"result": "CHECK"}]
+        )
+
+        report = image_url_auditor.format_audit_summary(summary)
+
+        self.assertIn("Total URLs: 2", report)
+        self.assertIn("Valid images (OK): 1", report)
+        self.assertIn("Success rate: 50.00%", report)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
