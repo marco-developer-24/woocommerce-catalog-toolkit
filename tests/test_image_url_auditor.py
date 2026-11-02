@@ -154,5 +154,37 @@ class TestCheckImage(unittest.TestCase):
                     )
 
 
+    @patch("image_url_auditor.urlopen")
+    def test_http_error_without_headers_is_reported_without_crashing(self, mock_urlopen):
+        mock_urlopen.side_effect = HTTPError(
+            "https://example.com/unavailable.jpg",
+            503,
+            "Service Unavailable",
+            None,
+            None,
+        )
+
+        result = image_url_auditor.check_image(
+            "https://example.com/unavailable.jpg"
+        )
+
+        self.assertEqual(result["status"], 503)
+        self.assertEqual(result["result"], "HTTP_ERROR")
+        self.assertIn("HTTP 503", result["error"])
+
+    @patch("image_url_auditor.urlopen")
+    def test_connection_timeout_is_reported_as_connection_error(self, mock_urlopen):
+        from urllib.error import URLError
+
+        mock_urlopen.side_effect = URLError(TimeoutError("connection timed out"))
+
+        result = image_url_auditor.check_image(
+            "https://example.com/slow-image.jpg"
+        )
+
+        self.assertEqual(result["result"], "CONNECTION_ERROR")
+        self.assertIn("timed out", result["error"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
