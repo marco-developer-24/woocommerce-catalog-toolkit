@@ -14,6 +14,20 @@ Checks image URLs listed in a CSV and reports HTTP status, content type, server-
 
 It checks response headers; it does not verify the actual image contents.
 
+### Run the auditor
+
+\`\`\`bash
+python src/image_url_auditor.py \\
+  --input supplier_images.csv \\
+  --output image_audit.csv \\
+  --delimiter ";" \\
+  --summary-output image_audit_summary.txt
+\`\`\`
+
+The CSV report keeps the configured SKU, product-name, and image-URL columns and appends the per-URL audit fields. The console always displays an aggregate summary with counts for \`OK\`, \`CHECK\`, \`HTTP_ERROR\`, \`CONNECTION_ERROR\`, and \`INVALID_URL\`, plus the success rate.
+
+The optional \`--summary-output\` writes the same aggregate summary to a separate plain-text file. Existing output files are never overwritten. The success rate is the percentage of audited URLs classified as \`OK\`; a \`CHECK\` response is not counted as a valid image.
+
 ## Tool 2: Catalog CSV Validator
 
 Validates supplier catalog files before any import or update. It runs offline, does not connect to WooCommerce, and never modifies the input file.
