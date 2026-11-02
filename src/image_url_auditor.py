@@ -25,6 +25,14 @@ FIELDNAMES = (
 
 def check_image(url, timeout=15):
     """Check an image URL and return HTTP and response metadata."""
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+    ):
+        raise ValueError("timeout must be a finite number greater than zero")
+
     url = (url or "").strip()
 
     if not url:
@@ -108,13 +116,14 @@ def check_image(url, timeout=15):
 
     except HTTPError as exc:
         elapsed = round(time.monotonic() - started, 3)
+        headers = exc.headers or {}
         return {
             "status": exc.code,
-            "content_type": exc.headers.get("Content-Type", ""),
-            "content_length": exc.headers.get("Content-Length", ""),
+            "content_type": headers.get("Content-Type", ""),
+            "content_length": headers.get("Content-Length", ""),
             "response_time": elapsed,
             "result": "HTTP_ERROR",
-            "error": str(exc.reason),
+            "error": f"HTTP {exc.code}: {exc.reason}",
         }
 
     except (URLError, TimeoutError, OSError, ValueError) as exc:
