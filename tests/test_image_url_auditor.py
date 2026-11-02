@@ -1,5 +1,9 @@
-﻿import sys
+import csv
+import io
+import sys
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
@@ -248,6 +252,7 @@ class TestBuildAuditSummary(unittest.TestCase):
                 "HTTP_ERROR": 1,
                 "CONNECTION_ERROR": 1,
                 "INVALID_URL": 1,
+                "UNKNOWN": 0,
             },
         )
         self.assertEqual(summary["success_rate"], 33.33)
@@ -259,13 +264,15 @@ class TestBuildAuditSummary(unittest.TestCase):
         self.assertEqual(summary["success_rate"], 0.0)
         self.assertTrue(all(value == 0 for value in summary["counts"].values()))
 
-    def test_unknown_result_is_included_in_total_but_not_known_buckets(self):
+    def test_unknown_result_is_counted_in_its_own_bucket(self):
         summary = image_url_auditor.build_audit_summary(
             [{"result": "OK"}, {"result": "UNEXPECTED"}]
         )
 
         self.assertEqual(summary["total"], 2)
         self.assertEqual(summary["counts"]["OK"], 1)
+        self.assertEqual(summary["counts"]["UNKNOWN"], 1)
+        self.assertEqual(sum(summary["counts"].values()), summary["total"])
         self.assertEqual(summary["success_rate"], 50.0)
 
     def test_formatted_summary_contains_counts_and_rate(self):
@@ -278,6 +285,70 @@ class TestBuildAuditSummary(unittest.TestCase):
         self.assertIn("Total URLs: 2", report)
         self.assertIn("Valid images (OK): 1", report)
         self.assertIn("Success rate: 50.00%", report)
+
+
+
+class TestImageAuditCli(unittest.TestCase):
+
+    def _write_input(self, path):
+        with open(path, "w", encoding="utf-8", newline="") as source:
+            writer = csv.DictWriter(
+                source,
+                fieldnames=("SKU", "PRODUCT_NAME", "IMAGE_URL"),
+                delimiter=";",
+            )
+            writer.writeheader()
+            writer.writerow({"SKU": "A-1", "PRODUCT_NAME": "Product A", "IMAGE_URL": "https://example.com/a.jpg"})
+            writer.writerow({"SKU": "B-2", "PRODUCT_NAME": "Product B", "IMAGE_URL": "https://example.com/b.jpg"})
+
+    @patch("image_url_auditor.check_image")
+    def test_cli_writes_summary_and_preserves_csv_columns(self, mock_check):
+        mock_check.side_effect = [
+            {"status": 200, "content_type": "image/jpeg", "content_length": "123", "response_time": 0.1, "result": "OK", "error": ""},
+            {"status": 404, "content_type": "", "content_length": "", "response_time": 0.2, "result": "HTTP_ERROR", "error": "HTTP 404: Not Found"},
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "input.csv"
+            output_path = Path(temp_dir) / "audit.csv"
+            summary_path = Path(temp_dir) / "summary.txt"
+            self._write_input(input_path)
+            args = ["image_url_auditor.py", "--input", str(input_path), "--output", str(output_path), "--summary-output", str(summary_path)]
+            with patch.object(sys, "argv", args), redirect_stdout(io.StringIO()):
+                image_url_auditor.main()
+
+            self.assertTrue(summary_path.is_file())
+            report = summary_path.read_text(encoding="utf-8")
+            self.assertIn("Total URLs: 2", report)
+            self.assertIn("Valid images (OK): 1", report)
+            self.assertIn("HTTP errors: 1", report)
+            self.assertIn("Success rate: 50.00%", report)
+            with open(output_path, encoding="utf-8-sig", newline="") as source:
+                reader = csv.DictReader(source, delimiter=";")
+                self.assertEqual(reader.fieldnames, ["SKU", "PRODUCT_NAME", "IMAGE_URL", *image_url_auditor.FIELDNAMES])
+                rows = list(reader)
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["SKU"], "A-1")
+            self.assertEqual(rows[1]["SKU"], "B-2")
+            self.assertEqual(rows[0]["result"], "OK")
+            self.assertEqual(rows[1]["result"], "HTTP_ERROR")
+            self.assertEqual(mock_check.call_count, 2)
+
+    @patch("image_url_auditor.check_image")
+    def test_cli_refuses_to_overwrite_existing_summary(self, mock_check):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "input.csv"
+            output_path = Path(temp_dir) / "audit.csv"
+            summary_path = Path(temp_dir) / "summary.txt"
+            self._write_input(input_path)
+            summary_path.write_text("keep this report", encoding="utf-8")
+            args = ["image_url_auditor.py", "--input", str(input_path), "--output", str(output_path), "--summary-output", str(summary_path)]
+            with patch.object(sys, "argv", args):
+                with self.assertRaises(SystemExit) as raised:
+                    image_url_auditor.main()
+            self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(summary_path.read_text(encoding="utf-8"), "keep this report")
+            self.assertFalse(output_path.exists())
+            mock_check.assert_not_called()
 
 
 if __name__ == "__main__":
