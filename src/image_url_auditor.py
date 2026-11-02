@@ -116,13 +116,14 @@ def check_image(url, timeout=15):
 
     except HTTPError as exc:
         elapsed = round(time.monotonic() - started, 3)
+        headers = exc.headers or {}
         return {
             "status": exc.code,
-            "content_type": exc.headers.get("Content-Type", ""),
-            "content_length": exc.headers.get("Content-Length", ""),
+            "content_type": headers.get("Content-Type", ""),
+            "content_length": headers.get("Content-Length", ""),
             "response_time": elapsed,
             "result": "HTTP_ERROR",
-            "error": str(exc.reason),
+            "error": f"HTTP {exc.code}: {exc.reason}",
         }
 
     except (URLError, TimeoutError, OSError, ValueError) as exc:
