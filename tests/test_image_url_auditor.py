@@ -143,7 +143,16 @@ class TestCheckImage(unittest.TestCase):
 
 
     def test_invalid_timeouts_are_rejected_before_network_request(self):
-        invalid_timeouts = (0, -1, float("nan"), float("inf"), float("-inf"), True, None, "1")
+        invalid_timeouts = (
+            0,
+            -1,
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            True,
+            None,
+            "1",
+        )
 
         for timeout in invalid_timeouts:
             with self.subTest(timeout=timeout):
@@ -184,6 +193,36 @@ class TestCheckImage(unittest.TestCase):
 
         self.assertEqual(result["result"], "CONNECTION_ERROR")
         self.assertIn("timed out", result["error"])
+
+
+    @patch("image_url_auditor.urlopen")
+    def test_common_http_error_statuses_are_preserved(self, mock_urlopen):
+        cases = (
+            (403, "Forbidden"),
+            (429, "Too Many Requests"),
+            (500, "Internal Server Error"),
+            (502, "Bad Gateway"),
+            (503, "Service Unavailable"),
+            (504, "Gateway Timeout"),
+        )
+
+        for status, reason in cases:
+            with self.subTest(status=status):
+                mock_urlopen.side_effect = HTTPError(
+                    "https://example.com/image.jpg",
+                    status,
+                    reason,
+                    {},
+                    None,
+                )
+
+                result = image_url_auditor.check_image(
+                    "https://example.com/image.jpg"
+                )
+
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["result"], "HTTP_ERROR")
+                self.assertIn(f"HTTP {status}", result["error"])
 
 
 if __name__ == "__main__":
