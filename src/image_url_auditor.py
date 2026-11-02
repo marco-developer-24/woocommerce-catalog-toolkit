@@ -145,6 +145,7 @@ AUDIT_RESULTS = (
     "HTTP_ERROR",
     "CONNECTION_ERROR",
     "INVALID_URL",
+    "UNKNOWN",
 )
 
 
@@ -156,8 +157,9 @@ def build_audit_summary(results):
     for item in results:
         total += 1
         result = item.get("result", "")
-        if result in counts:
-            counts[result] += 1
+        if result not in counts:
+            result = "UNKNOWN"
+        counts[result] += 1
 
     success_rate = round((counts["OK"] / total) * 100, 2) if total else 0.0
 
@@ -180,6 +182,7 @@ def format_audit_summary(summary):
         f"HTTP errors: {counts['HTTP_ERROR']}",
         f"Connection errors: {counts['CONNECTION_ERROR']}",
         f"Invalid URLs: {counts['INVALID_URL']}",
+        f"Unknown results: {counts['UNKNOWN']}",
         f"Success rate: {summary['success_rate']:.2f}%",
     ]
     return "\n".join(lines)
