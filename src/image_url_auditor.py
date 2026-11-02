@@ -25,6 +25,14 @@ FIELDNAMES = (
 
 def check_image(url, timeout=15):
     """Check an image URL and return HTTP and response metadata."""
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+    ):
+        raise ValueError("timeout must be a finite number greater than zero")
+
     url = (url or "").strip()
 
     if not url:
