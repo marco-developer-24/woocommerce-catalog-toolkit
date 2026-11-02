@@ -142,5 +142,17 @@ class TestCheckImage(unittest.TestCase):
         self.assertEqual(result["result"], "INVALID_URL")
 
 
+    def test_invalid_timeouts_are_rejected_before_network_request(self):
+        invalid_timeouts = (0, -1, float("nan"), float("inf"), float("-inf"), True, None, "1")
+
+        for timeout in invalid_timeouts:
+            with self.subTest(timeout=timeout):
+                with self.assertRaises(ValueError):
+                    image_url_auditor.check_image(
+                        "https://example.com/image.jpg",
+                        timeout=timeout,
+                    )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
