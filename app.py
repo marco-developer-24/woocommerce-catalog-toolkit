@@ -11,7 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from src.catalog_csv_validator import validate_catalog_csv
-from src.catalog_csv_report import REPORT_FIELDS, build_catalog_report
+from src.catalog_csv_report import REPORT_FIELDS, build_catalog_report, filter_catalog_issues
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -412,7 +412,46 @@ if result and result.get("signature") == current_signature:
 
     if result["issues"]:
         st.subheader("Problemas detectados")
-        st.table(result["issues"])
+        filter_cols = st.columns([1, 1, 2])
+        with filter_cols[0]:
+            severity_label = st.selectbox(
+                "Severidad",
+                ["Todas", "Errores", "Advertencias"],
+                key="issue_severity_filter",
+            )
+        with filter_cols[1]:
+            available_fields = sorted({issue["field"] for issue in result["issues"]})
+            field_filter = st.selectbox(
+                "Campo",
+                ["Todos"] + available_fields,
+                key="issue_field_filter",
+            )
+        with filter_cols[2]:
+            issue_search = st.text_input(
+                "Buscar en incidencias",
+                placeholder="SKU, valor, código o descripción...",
+                key="issue_search_filter",
+            )
+
+        severity_filter = {
+            "Todas": None,
+            "Errores": "error",
+            "Advertencias": "warning",
+        }[severity_label]
+        visible_issues = filter_catalog_issues(
+            result["issues"],
+            severity=severity_filter,
+            field=None if field_filter == "Todos" else field_filter,
+            search=issue_search,
+        )
+        st.caption(
+            f"Mostrando {len(visible_issues)} de {len(result['issues'])} incidencias. "
+            "Los archivos descargables conservan el informe completo."
+        )
+        if visible_issues:
+            st.dataframe(visible_issues, hide_index=True, use_container_width=True)
+        else:
+            st.info("No hay incidencias que coincidan con estos filtros.")
     else:
         st.info("El CSV no presenta incidencias según las reglas actuales.")
 
