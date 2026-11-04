@@ -8,6 +8,32 @@ Small Python utilities for auditing WooCommerce catalog data and reducing avoida
 
 ---
 
+## Choose the right tool
+
+| If you need to... | Use | What you get |
+|---|---|---|
+| Check whether supplier image URLs respond as expected | Image URL Auditor | A CSV with per-URL response details and an aggregate summary |
+| Find data-quality issues in a supplier catalog | Catalog CSV Validator | Validation issues and a summary before import |
+| Identify SKUs that may be new compared with a store export | New-product preflight | Candidate, review, and full-report CSV files |
+| Review CSV validation in a browser without using the CLI | Streamlit interface | A local upload, preview, validation, and report-download workflow |
+
+These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. The preflight compares SKUs; it does not validate every field required by WooCommerce's importer.
+
+## Recommended catalog-preparation workflow
+
+For a supplier file that may contain products to add to an existing store:
+
+1. **Preserve the source.** Keep the supplier's original file unchanged and work with a copy.
+2. **Validate the data.** Run the Catalog CSV Validator and resolve errors before moving forward. Review warnings as well.
+3. **Compare SKUs.** Export the current WooCommerce catalog and run New-product preflight against the supplier copy.
+4. **Review candidates manually.** Check repeated or blank SKUs and look for possible duplicates that use different SKUs. The preflight result is a screening aid, not proof that a product is new.
+5. **Prepare the import separately.** Map approved fields to WooCommerce's native CSV format. Preflight output is not a ready-to-import file.
+6. **Check image URLs when needed.** Run the Image URL Auditor against the relevant image URL column. A successful HTTP response does not guarantee that the file is a valid or suitable product image.
+7. **Test cautiously.** Back up the store, test a small batch on staging when possible, and verify the importer mapping and resulting products before processing the full batch.
+
+The toolkit prepares and reviews data locally. It does not connect to a store or perform the import.
+
+
 ## Tool 1: Image URL Auditor
 
 Checks image URLs listed in a CSV and reports HTTP status, content type, server-reported length when available, response time, and error details.
