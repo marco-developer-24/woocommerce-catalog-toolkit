@@ -54,6 +54,28 @@ def build_catalog_report(total_products, issues):
     }
 
 
+def filter_catalog_issues(issues, severity=None, field=None, search=None):
+    """Return issues matching optional severity, field, and case-insensitive text filters."""
+    if severity not in (None, "error", "warning"):
+        raise ValueError("severity must be 'error', 'warning', or None.")
+
+    normalized_search = str(search or "").strip().casefold()
+    filtered = []
+
+    for issue in issues:
+        if severity is not None and issue.get("severity") != severity:
+            continue
+        if field is not None and issue.get("field") != field:
+            continue
+        if normalized_search:
+            searchable = " ".join(str(value) for value in issue.values()).casefold()
+            if normalized_search not in searchable:
+                continue
+        filtered.append(issue)
+
+    return filtered
+
+
 def export_issues_csv(issues, output_path, overwrite=False):
     """Write row-level issues to CSV and return the output path.
 
