@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from catalog_csv_validator import validate_catalog_csv
-from catalog_csv_report import build_catalog_report, export_issues_csv
+from catalog_csv_report import build_catalog_report, export_issues_csv, filter_catalog_issues
 
 
 class TestCatalogCsvValidator(unittest.TestCase):
@@ -126,6 +126,31 @@ class TestCatalogCsvValidator(unittest.TestCase):
 
 
 class TestCatalogCsvReport(unittest.TestCase):
+    def test_filters_issues_by_severity_and_field(self):
+        issues = [
+            {"row_number": 2, "field": "SKU", "value": "A-1", "severity": "error", "code": "duplicate_sku", "message": "Duplicate SKU"},
+            {"row_number": 3, "field": "STOCK", "value": "-1", "severity": "warning", "code": "negative_stock", "message": "Stock must not be negative."},
+            {"row_number": 4, "field": "SKU", "value": "", "severity": "error", "code": "empty_sku", "message": "SKU must not be empty."},
+        ]
+        filtered = filter_catalog_issues(issues, severity="error", field="SKU")
+        self.assertEqual([issue["code"] for issue in filtered], ["duplicate_sku", "empty_sku"])
+
+    def test_search_is_case_insensitive_and_checks_all_issue_fields(self):
+        issues = [
+            {"row_number": 2, "field": "SKU", "value": "AbC-123", "severity": "error", "code": "duplicate_sku", "message": "Duplicate SKU"},
+            {"row_number": 3, "field": "PRICE", "value": "abc", "severity": "error", "code": "invalid_price", "message": "Invalid price"},
+        ]
+        filtered = filter_catalog_issues(issues, search="ABC-123")
+        self.assertEqual([issue["row_number"] for issue in filtered], [2])
+
+    def test_filter_without_criteria_returns_all_issues(self):
+        issues = [{"row_number": 2, "field": "SKU", "severity": "error"}]
+        self.assertEqual(filter_catalog_issues(issues), issues)
+
+    def test_rejects_unknown_severity_filter(self):
+        with self.assertRaisesRegex(ValueError, "severity"):
+            filter_catalog_issues([], severity="critical")
+
     def test_summary_counts_products_and_issues_by_severity(self):
         issues = [
             {"row_number": 2, "severity": "error"},
