@@ -152,6 +152,40 @@ The output directory must be new or empty. The tool refuses to overwrite files i
 
 Do not interpret "new candidate" as a guarantee that the product is new. This tool never guarantees that an import cannot affect existing data.
 
+## Tool 4: Catalog Update Planner
+
+Compares supplier values with a WooCommerce catalog export for products whose SKU appears exactly once in both files. It creates a review report; it does not connect to WooCommerce or update products.
+
+### What it classifies
+
+- `UPDATE_REQUIRED`: at least one configured value differs.
+- `NO_CHANGE`: all configured values match.
+- `NEW_CANDIDATE`: the supplier SKU is not present in the catalog snapshot.
+- `REVIEW_REQUIRED`: blank or duplicate SKUs, invalid numeric values, or blank supplier values that must not clear existing data.
+
+Price and stock comparisons are optional, but each comparison requires a supplier and catalog column. Numeric comparison uses decimal values, so `100` and `100.00` are treated as equal. Values must use a plain numeric format; the tool does not guess decimal or thousands separators from locale-specific formats. Stock must be a non-negative whole number.
+
+### Example
+
+Compare supplier price and stock against a WooCommerce CSV export:
+
+```bash
+python src/catalog_update_planner.py \
+  --supplier supplier.csv \
+  --catalog catalog-export.csv \
+  --output output/catalog-update-plan.csv \
+  --supplier-price-column "Precio" \
+  --catalog-price-column "Regular price" \
+  --supplier-stock-column "Existencia" \
+  --catalog-stock-column "Stock quantity"
+```
+
+Use `--supplier-delimiter` and `--catalog-delimiter` when the files use different separators. SKU columns can be mapped independently with `--supplier-sku-column` and `--catalog-sku-column`.
+
+The output preserves supplier columns and appends the supplier row, matched catalog row, planner status, changed fields, and review reason. Existing output files are never overwritten.
+
+**Safety boundary:** this is a planning report, not an import file. Review every proposed change, verify that the catalog export is current, map approved values to WooCommerce's native importer, and test a small batch on staging. Blank supplier values are never treated as instructions to clear existing price or stock values.
+
 ## Local graphical interface (first version)
 
 The repository includes an optional Streamlit interface for the Catalog CSV Validator. It lets you upload a supplier CSV, inspect a preview, choose the delimiter, map supplier columns, run the existing validation rules, and download the issue CSV or a ZIP report.
