@@ -341,8 +341,8 @@ class TestImageAuditCli(unittest.TestCase):
             output_path = Path(temp_dir) / "audit.csv"
 
             input_path.write_text(
-                'SKU;PRODUCT_NAME;IMAGE_URL\\n'
-                'A-1;"Product A;https://example.com/a.jpg\\n',
+                'SKU;PRODUCT_NAME;IMAGE_URL\n'
+                'A-1;"Product A;https://example.com/a.jpg\n',
                 encoding="utf-8",
             )
 
