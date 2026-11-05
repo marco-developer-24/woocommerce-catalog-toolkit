@@ -360,7 +360,7 @@ with st.container(border=True):
             issues_text = make_issues_text(issues)
             diagnostic_text = (
                 summary
-                + "\\nDetalle de incidencias\\n======================\\n"
+                + "\nDetalle de incidencias\n======================\n"
                 + issues_text
             )
             archive = make_report_zip(issues_csv, summary)
