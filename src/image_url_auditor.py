@@ -190,7 +190,7 @@ def format_audit_summary(summary):
 def validate_input_csv(input_path, delimiter, required_columns):
     """Read and validate the complete CSV before making network requests."""
     with open(input_path, encoding="utf-8-sig", newline="") as source:
-        reader = csv.DictReader(source, delimiter=delimiter)
+        reader = csv.DictReader(source, delimiter=delimiter, strict=True)
         headers = reader.fieldnames
 
         if not headers:
