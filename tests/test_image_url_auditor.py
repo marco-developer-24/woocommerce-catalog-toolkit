@@ -333,6 +333,33 @@ class TestImageAuditCli(unittest.TestCase):
             self.assertEqual(rows[1]["result"], "HTTP_ERROR")
             self.assertEqual(mock_check.call_count, 2)
 
+
+    @patch("image_url_auditor.check_image")
+    def test_cli_rejects_malformed_csv_before_network_requests(self, mock_check):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "malformed.csv"
+            output_path = Path(temp_dir) / "audit.csv"
+
+            input_path.write_text(
+                'SKU;PRODUCT_NAME;IMAGE_URL\\n'
+                'A-1;"Product A;https://example.com/a.jpg\\n',
+                encoding="utf-8",
+            )
+
+            args = [
+                "image_url_auditor.py",
+                "--input", str(input_path),
+                "--output", str(output_path),
+            ]
+
+            with patch.object(sys, "argv", args):
+                with self.assertRaises(SystemExit) as raised:
+                    image_url_auditor.main()
+
+            self.assertEqual(raised.exception.code, 1)
+            self.assertFalse(output_path.exists())
+            mock_check.assert_not_called()
+
     @patch("image_url_auditor.check_image")
     def test_cli_refuses_to_overwrite_existing_summary(self, mock_check):
         with tempfile.TemporaryDirectory() as temp_dir:
