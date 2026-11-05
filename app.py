@@ -3,14 +3,12 @@
 import csv
 import hashlib
 import io
-import tempfile
 import unicodedata
 import zipfile
-from pathlib import Path
 
 import streamlit as st
 
-from src.catalog_csv_validator import validate_catalog_csv
+from src.application.catalog_validation import run_catalog_validation
 from src.catalog_csv_report import REPORT_FIELDS, build_catalog_report, filter_catalog_issues
 
 
@@ -340,36 +338,29 @@ with st.container(border=True):
         use_container_width=True,
         disabled=bool(mapping_error),
     ):
-        mapping = current_mapping
-        temp_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary:
-                temporary.write(file_bytes)
-                temp_path = Path(temporary.name)
-
-            issues = validate_catalog_csv(
-                temp_path,
+            validation = run_catalog_validation(
+                file_bytes,
+                total_products=total_rows,
                 delimiter=delimiter,
-                sku_column=mapping["sku"],
-                name_column=mapping["name"],
-                price_column=mapping["price"],
-                stock_column=mapping["stock"],
+                mapping=current_mapping,
             )
-            report = build_catalog_report(total_rows, issues)
+            issues = validation["issues"]
+            report = validation["report"]
+            file_hash = validation["file_hash"]
             issues_csv = make_issues_csv(issues)
-            file_hash = hashlib.sha256(file_bytes).hexdigest()
             summary = make_summary(
                 uploaded_file.name,
                 file_hash,
                 delimiter,
-                mapping,
+                current_mapping,
                 report,
                 ignored_empty_columns,
             )
             issues_text = make_issues_text(issues)
             diagnostic_text = (
                 summary
-                + "\nDetalle de incidencias\n======================\n"
+                + "\\nDetalle de incidencias\\n======================\\n"
                 + issues_text
             )
             archive = make_report_zip(issues_csv, summary)
@@ -387,9 +378,6 @@ with st.container(border=True):
         except (OSError, UnicodeError, csv.Error, ValueError) as exc:
             st.error(f"No se pudo completar la validación: {exc}")
             st.session_state.pop("catalog_validation", None)
-        finally:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
 
 result = st.session_state.get("catalog_validation")
 if result and result.get("signature") == current_signature:
