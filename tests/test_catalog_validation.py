@@ -1,5 +1,7 @@
 import hashlib
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from src.application.catalog_validation import run_catalog_validation
 
@@ -55,6 +57,30 @@ class TestCatalogValidationWorkflow(unittest.TestCase):
                 delimiter=";",
                 mapping=self.mapping,
             )
+
+    def test_temporary_file_is_removed_when_validation_fails(self):
+        temporary_paths = []
+
+        def fail_validation(path, **kwargs):
+            temporary_path = Path(path)
+            temporary_paths.append(temporary_path)
+            self.assertTrue(temporary_path.exists())
+            raise RuntimeError("validation failed")
+
+        with patch(
+            "src.application.catalog_validation.validate_catalog_csv",
+            side_effect=fail_validation,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "validation failed"):
+                run_catalog_validation(
+                    self.file_bytes,
+                    total_products=2,
+                    delimiter=";",
+                    mapping=self.mapping,
+                )
+
+        self.assertEqual(len(temporary_paths), 1)
+        self.assertFalse(temporary_paths[0].exists())
 
 
 if __name__ == "__main__":
