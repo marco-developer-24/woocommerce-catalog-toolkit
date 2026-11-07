@@ -8,6 +8,20 @@ Small Python utilities for auditing WooCommerce catalog data and reducing avoida
 
 ---
 
+## Contents
+
+- [Choose the right tool](#choose-the-right-tool)
+- [Recommended catalog-preparation workflow](#recommended-catalog-preparation-workflow)
+- [Image URL Auditor](#tool-1-image-url-auditor)
+- [Catalog CSV Validator](#tool-2-catalog-csv-validator)
+- [New-product preflight](#tool-3-new-product-preflight)
+- [Catalog Update Planner](#tool-4-catalog-update-planner)
+- [Local graphical interface](#local-graphical-interface-first-version)
+- [Requirements](#requirements)
+- [Tests](#tests)
+- [Project status](#project-status)
+- [License](#license)
+
 ## Choose the right tool
 
 | If you need to... | Use | What you get |
@@ -33,7 +47,6 @@ For a supplier file that may contain products to add to an existing store:
 
 The toolkit prepares and reviews data locally. It does not connect to a store or perform the import.
 
-
 ## Tool 1: Image URL Auditor
 
 Checks image URLs listed in a CSV and reports HTTP status, content type, server-reported length when available, response time, and error details.
@@ -42,13 +55,13 @@ It checks response headers; it does not verify the actual image contents.
 
 ### Run the auditor
 
-\`\`\`bash
+```bash
 python src/image_url_auditor.py \\
   --input supplier_images.csv \\
   --output image_audit.csv \\
   --delimiter ";" \\
   --summary-output image_audit_summary.txt
-\`\`\`
+```
 
 The CSV report keeps the configured SKU, product-name, and image-URL columns and appends the per-URL audit fields. The console always displays an aggregate summary with counts for `OK`, `CHECK`, `HTTP_ERROR`, `CONNECTION_ERROR`, `INVALID_URL`, and `UNKNOWN`, plus the success rate. Unexpected or unrecognized result values are grouped under `UNKNOWN`, so the result counts always add up to the total number of audited URLs.
 
