@@ -1,4 +1,3 @@
-
 """Select supplier products by category, price, and optional stock criteria."""
 
 from .common import parse_non_negative_decimal
@@ -22,6 +21,7 @@ def select_products(
     category_limits,
     stock_column=None,
     minimum_stock=None,
+    row_numbers=None,
 ):
     """Select the lowest-priced eligible products within each category limit.
 
@@ -36,6 +36,29 @@ def select_products(
 
     if stock_column is None and minimum_stock is not None:
         raise ValueError("minimum_stock requires a stock_column.")
+
+    if row_numbers is not None:
+        supplier_rows = list(supplier_rows)
+        row_numbers = list(row_numbers)
+
+        if len(row_numbers) != len(supplier_rows):
+            raise ValueError(
+                "row_numbers must match the number of supplier rows."
+            )
+
+        if any(
+            isinstance(number, bool)
+            or not isinstance(number, int)
+            or number < 2
+            for number in row_numbers
+        ):
+            raise ValueError("row_numbers must contain CSV row numbers.")
+
+        if any(
+            current <= previous
+            for previous, current in zip(row_numbers, row_numbers[1:])
+        ):
+            raise ValueError("row_numbers must be strictly increasing.")
 
     normalized_limits = {}
     for category, limit in category_limits.items():
@@ -72,13 +95,18 @@ def select_products(
         for category, config in normalized_limits.items()
     }
 
-    for index, row in enumerate(supplier_rows, start=2):
+    for index, row in enumerate(supplier_rows):
+        row_number = (
+            row_numbers[index]
+            if row_numbers is not None
+            else index + 2
+        )
         category_value = row.get(category_column, "")
         normalized_category = normalize_category(category_value)
         price = parse_non_negative_decimal(row.get(price_column, ""))
 
         item = {
-            "row_number": index,
+            "row_number": row_number,
             "row": dict(row),
             "category": category_value,
             "price": None if price is None else format(price, "f"),
@@ -124,7 +152,7 @@ def select_products(
                     )
 
             if item["status"] is None:
-                candidates[normalized_category].append((price, index - 1, item))
+                candidates[normalized_category].append((price, row_number, item))
 
         items.append(item)
 

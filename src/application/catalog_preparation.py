@@ -116,6 +116,7 @@ def prepare_catalog(
         category_limits=selection_config["category_limits"],
         stock_column=selection_config.get("stock_column"),
         minimum_stock=selection_config.get("minimum_stock"),
+        row_numbers=[item["row_number"] for item in ready_items],
     )
 
     # select_products preserves input order, so each selection item maps back to

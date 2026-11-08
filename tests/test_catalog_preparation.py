@@ -273,6 +273,13 @@ class CatalogPreparationTests(unittest.TestCase):
                 self.assertEqual(row["Published"], "0")
                 self.assertEqual(row["Type"], "simple")
 
+    def test_selection_preserves_original_supplier_row_numbers(self):
+        result = self._prepare()
+
+        self.assertEqual(
+            [item["row_number"] for item in result["selection"]["items"]],
+            [2, 4],
+        )
 
 class CatalogPreparationValidationTests(unittest.TestCase):
     def setUp(self):
