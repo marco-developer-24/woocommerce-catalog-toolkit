@@ -280,9 +280,9 @@ This is a preparation result, not a complete WooCommerce import contract. It doe
 
 ## Local graphical interface (first version)
 
-The repository includes an optional Streamlit interface for the Catalog CSV Validator. It lets you upload a supplier CSV, inspect a preview, choose the delimiter, map supplier columns, run the existing validation rules, and download the issue CSV or a ZIP report.
+The repository includes an optional Streamlit interface for catalog validation and category-based preparation. Upload a supplier CSV to inspect its structure, map validation columns, run the existing validation rules, and download issue reports. The preparation workflow additionally accepts a current WooCommerce catalog export, maps supplier and catalog SKU columns, lets you enable categories and set per-category limits, and optionally applies a minimum-stock rule.
 
-The interface runs locally and does not connect to WordPress or WooCommerce. It does not import, update, delete, or publish products. The uploaded source file is kept unchanged. The category-based preparation workflow is not yet exposed in Streamlit.
+The interface runs locally and does not connect to WordPress or WooCommerce. Preparation produces a selected-products CSV with SKU, Name, Regular price, Published (0), and Type (simple), plus a review CSV containing selected, not-selected, blocked, review, and existing-product outcomes with reasons and source row numbers. This is a limited preparation output, not a complete WooCommerce import contract. The interface does not import, update, delete, or publish products, and source files remain unchanged.
 
 ### Run the interface
 
@@ -313,7 +313,7 @@ Tests should not need live external websites; image URL tests use mocked HTTP re
 
 ## Project status
 
-Early development. The toolkit contains local CSV validation, comparison, and category-based preparation logic. The Streamlit interface currently exposes validation only; the broader preparation workflow still needs to be integrated into the user interface and verified with real catalog files.
+Early development. The toolkit contains local CSV validation, comparison, and category-based preparation logic. The Streamlit interface exposes validation and a first category-based preparation workflow. The workflow still needs usability testing with representative supplier and WooCommerce catalog exports.
 
 ## License
 
