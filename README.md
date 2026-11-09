@@ -1,6 +1,6 @@
 # WooCommerce Catalog Toolkit
 
-Small Python utilities for auditing WooCommerce catalog data and reducing avoidable mistakes during product-data preparation.
+Small Python utilities for auditing supplier catalog data and preparing controlled product-data changes for WooCommerce review.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Input](https://img.shields.io/badge/Input-CSV-3B82C4)
@@ -16,6 +16,7 @@ Small Python utilities for auditing WooCommerce catalog data and reducing avoida
 - [Catalog CSV Validator](#tool-2-catalog-csv-validator)
 - [New-product preflight](#tool-3-new-product-preflight)
 - [Catalog Update Planner](#tool-4-catalog-update-planner)
+- [Catalog Preparation and Category Selection](#tool-5-catalog-preparation-and-category-selection)
 - [Local graphical interface](#local-graphical-interface-first-version)
 - [Requirements](#requirements)
 - [Tests](#tests)
@@ -29,21 +30,24 @@ Small Python utilities for auditing WooCommerce catalog data and reducing avoida
 | Check whether supplier image URLs respond as expected | Image URL Auditor | A CSV with per-URL response details and an aggregate summary |
 | Find data-quality issues in a supplier catalog | Catalog CSV Validator | Validation issues and a summary before import |
 | Identify SKUs that may be new compared with a store export | New-product preflight | Candidate, review, and full-report CSV files |
+| Compare supplier prices or stock with a store export | Catalog Update Planner | A review report of detected differences |
+| Prepare a limited set of new products by category | Catalog Preparation | Selected product rows and classification/selection details |
 | Review CSV validation in a browser without using the CLI | Streamlit interface | A local upload, preview, validation, and report-download workflow |
 
-These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. The preflight compares SKUs; it does not validate every field required by WooCommerce's importer.
+These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. SKU preflight is a screening aid, not proof that a product is new. Catalog Preparation combines new-product classification with category-based selection, but its workflow is currently available through the Python application layer, not the Streamlit interface.
 
 ## Recommended catalog-preparation workflow
 
 For a supplier file that may contain products to add to an existing store:
 
 1. **Preserve the source.** Keep the supplier's original file unchanged and work with a copy.
-2. **Validate the data.** Run the Catalog CSV Validator and resolve errors before moving forward. Review warnings as well.
-3. **Compare SKUs.** Export the current WooCommerce catalog and run New-product preflight against the supplier copy.
-4. **Review candidates manually.** Check repeated or blank SKUs and look for possible duplicates that use different SKUs. The preflight result is a screening aid, not proof that a product is new.
-5. **Prepare the import separately.** Map approved fields to WooCommerce's native CSV format. Preflight output is not a ready-to-import file.
-6. **Check image URLs when needed.** Run the Image URL Auditor against the relevant image URL column. A successful HTTP response does not guarantee that the file is a valid or suitable product image.
+2. **Inspect and validate the data.** Confirm the delimiter and column mapping. Run the Catalog CSV Validator and resolve errors before moving forward. Review warnings as well.
+3. **Compare against a current catalog export.** Use a recent WooCommerce product export. New-product classification depends on the accuracy and freshness of that snapshot.
+4. **Configure category selection.** Enable only the categories required for the current catalog batch and set a product limit for each category.
+5. **Review the result.** Check excluded existing SKUs, blocked rows, selected products, and eligible products left outside category limits. Review the reasons and source row numbers.
+6. **Prepare the next step separately.** The current preparation output contains a limited set of product fields. It is not a universal WooCommerce import file; confirm field mapping and add any required attributes, images, categories, tax, shipping, or variation data before import.
 7. **Test cautiously.** Back up the store, test a small batch on staging when possible, and verify the importer mapping and resulting products before processing the full batch.
+8. **Check image URLs when needed.** Run the Image URL Auditor against the relevant image URL column. A successful HTTP response does not guarantee that the file is a valid or suitable product image.
 
 The toolkit prepares and reviews data locally. It does not connect to a store or perform the import.
 
@@ -56,10 +60,10 @@ It checks response headers; it does not verify the actual image contents.
 ### Run the auditor
 
 ```bash
-python src/image_url_auditor.py \\
-  --input supplier_images.csv \\
-  --output image_audit.csv \\
-  --delimiter ";" \\
+python src/image_url_auditor.py \
+  --input supplier_images.csv \
+  --output image_audit.csv \
+  --delimiter ";" \
   --summary-output image_audit_summary.txt
 ```
 
@@ -199,11 +203,86 @@ The output preserves supplier columns and appends the supplier row, matched cata
 
 **Safety boundary:** this is a planning report, not an import file. Review every proposed change, verify that the catalog export is current, map approved values to WooCommerce's native importer, and test a small batch on staging. Blank supplier values are never treated as instructions to clear existing price or stock values.
 
+## Tool 5: Catalog Preparation and Category Selection
+
+The application layer includes a workflow that combines new-product classification with category-based commercial selection.
+
+It performs the steps in this order:
+
+1. Compare supplier SKUs with the supplied WooCommerce catalog snapshot.
+2. Exclude products whose SKUs already exist.
+3. Block rows with missing or ambiguous SKUs, missing names, or invalid prices.
+4. Apply category selection only to rows classified as ready to add.
+5. Return selected product rows and summaries for review.
+
+This order matters: existing products and blocked rows do not consume category limits.
+
+### Selection rules currently implemented
+
+- Categories are matched after trimming surrounding whitespace and applying case-insensitive normalization.
+- Matching is exact after normalization; fuzzy matching and accent normalization are not implemented.
+- Each configured category has an integer product limit, or `None` for no limit.
+- Eligible products are ordered by ascending non-negative price within each category.
+- Ties are resolved by original supplier row number.
+- An optional stock column and minimum stock can exclude products with invalid or insufficient stock.
+- Results preserve original supplier order and include row numbers, statuses, reason codes, and category positions.
+
+The current selection rule is therefore **lowest price within each enabled category**, not a general-purpose or automated "best product" recommendation.
+
+### Python application example
+
+```python
+from src.application.catalog_preparation import prepare_catalog
+
+result = prepare_catalog(
+    supplier_rows,
+    catalog_rows,
+    selection_config={
+        "category_column": "CATEGORIA",
+        "price_column": "PRECIO",
+        "category_limits": {
+            "NOTEBOOKS": 5,
+            "PC ARMADAS": 3,
+            "MEMORIAS RAM": 4,
+        },
+        # Optional:
+        # "stock_column": "STOCK",
+        # "minimum_stock": 1,
+    },
+    supplier_columns={
+        "sku": "CODIGO",
+        "name": "DETALLE",
+        "price": "PRECIO",
+        "catalog_sku": "SKU",
+    },
+)
+
+print(result["summary"])
+selected_rows = result["export_rows"]
+selection_details = result["selection"]
+```
+
+The example assumes that `supplier_rows` and `catalog_rows` have already been loaded as row dictionaries. Column names must match the actual input headers.
+
+### Result and safety boundary
+
+The workflow returns:
+
+- `export_rows`: selected rows prepared with the current limited field set: SKU, Name, Regular price, Published (0), and Type (simple).
+- `export_items`: selected operation items with their original supplier row context.
+- `selection`: per-row selection status, reason, source row number, and per-category counts.
+- `add_products`: the underlying new-product classification result.
+- `summary`: counts for supplier rows, catalog rows, new ready rows, exported rows, existing products excluded, blocked rows, review rows, and ready rows not selected.
+
+This is a preparation result, not a complete WooCommerce import contract. It does not currently map images, categories, attributes, tax, shipping, variations, or arbitrary supplier fields. It does not connect to WooCommerce, import, update, delete, or publish products. Selected products are explicitly prepared as unpublished simple products (`Published=0`, `Type=simple`).
+
+**Current interface limitation:** the Streamlit interface described below exposes CSV validation only. Category-based catalog preparation is not yet available through that interface.
+
 ## Local graphical interface (first version)
 
 The repository includes an optional Streamlit interface for the Catalog CSV Validator. It lets you upload a supplier CSV, inspect a preview, choose the delimiter, map supplier columns, run the existing validation rules, and download the issue CSV or a ZIP report.
 
-The interface runs locally and does not connect to WordPress or WooCommerce. It does not import, update, delete, or publish products. The uploaded source file is kept unchanged.
+The interface runs locally and does not connect to WordPress or WooCommerce. It does not import, update, delete, or publish products. The uploaded source file is kept unchanged. The category-based preparation workflow is not yet exposed in Streamlit.
 
 ### Run the interface
 
@@ -221,7 +300,7 @@ The Streamlit dependency is kept separate from the core toolkit. CLI users and a
 ## Requirements
 
 - Python 3.10+
-- No third-party Python packages required
+- No third-party Python packages required for the core Python modules
 - CSV inputs in UTF-8 or UTF-8 with BOM
 
 ## Tests
@@ -234,7 +313,7 @@ Tests should not need live external websites; image URL tests use mocked HTTP re
 
 ## Project status
 
-Early development. The utilities focus on narrow, auditable checks rather than an automatic importer.
+Early development. The toolkit contains local CSV validation, comparison, and category-based preparation logic. The Streamlit interface currently exposes validation only; the broader preparation workflow still needs to be integrated into the user interface and verified with real catalog files.
 
 ## License
 
