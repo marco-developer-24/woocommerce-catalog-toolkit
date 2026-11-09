@@ -538,7 +538,7 @@ if prep_result:
     detail_metrics[1].metric("En revisión", summary["review"])
     detail_metrics[2].metric("Aptos fuera del límite", summary["ready_not_selected"])
     if preparation["export_rows"]:
-        st.success(f"Se prepararon {summary[chr(101)+chr(120)+chr(112)+chr(111)+chr(114)+chr(116)+chr(101)+chr(100)]} producto(s). La salida mantiene Published=0 y Type=simple.")
+        st.success(f"Se prepararon {summary['exported']} producto(s). La salida mantiene Published=0 y Type=simple.")
     else:
         st.warning("No hay productos seleccionados con la configuración actual.")
     st.markdown("**Detalle de selección**")
