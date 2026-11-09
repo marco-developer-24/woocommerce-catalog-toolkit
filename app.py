@@ -9,6 +9,8 @@ import zipfile
 import streamlit as st
 
 from src.application.catalog_validation import run_catalog_validation
+from src.application.catalog_preparation import prepare_catalog
+from src.application.catalog_input import read_csv_rows
 from src.catalog_csv_report import REPORT_FIELDS, build_catalog_report, filter_catalog_issues
 from src.application.catalog_input import detect_delimiter, read_csv_preview
 
@@ -20,6 +22,29 @@ DELIMITER_OPTIONS = {
     "Barra vertical (|)": "|",
 }
 
+
+
+def make_dict_rows_csv(rows, fieldnames):
+    output = io.StringIO(newline='')
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(rows)
+    return ('\ufeff' + output.getvalue()).encode('utf-8')
+
+def make_preparation_review(result):
+    return [
+        {
+            'CSV row': item['row_number'],
+            'SKU': item['row'].get('SKU', ''),
+            'Category': item['category'],
+            'Price': item['price'],
+            'Status': item['status'],
+            'Reason code': item['reason_code'],
+            'Reason': item['reason'],
+            'Category position': item['category_position'],
+        }
+        for item in result['selection']['items']
+    ]
 
 def make_issues_csv(issues):
     output = io.StringIO(newline="")
@@ -426,4 +451,105 @@ elif result:
     st.info("Cambiaste el archivo o la configuración. Ejecutá nuevamente el análisis para generar resultados actualizados.")
 
 st.divider()
-st.caption("Versión inicial de la interfaz · Análisis local · Sin conexión a WooCommerce · Sin escritura sobre el archivo fuente")
+st.header("Preparación de catálogo")
+st.write("Seleccioná productos nuevos para un lote por categoría. Se comparan los SKU contra una exportación de WooCommerce. Esta etapa no importa ni publica productos.")
+st.caption("Regla actual: dentro de cada categoría se priorizan los productos elegibles de menor precio. Revisá el resultado antes de continuar.")
+
+with st.container(border=True):
+    catalog_file = st.file_uploader("Exportación actual de productos WooCommerce", type=["csv"], key="preparation_catalog_file")
+    if catalog_file is not None:
+        catalog_bytes = catalog_file.getvalue()
+        if len(catalog_bytes) > MAX_UPLOAD_BYTES:
+            st.error("La exportación supera el límite de 50 MB.")
+        else:
+            try:
+                catalog_sample = catalog_bytes[:8192].decode("utf-8-sig")
+                detected_catalog_delimiter = detect_delimiter(catalog_sample)
+                catalog_delimiter_label = next((label for label, value in DELIMITER_OPTIONS.items() if value == detected_catalog_delimiter), delimiter_labels[0])
+                catalog_label = st.selectbox("Separador del catálogo WooCommerce", delimiter_labels, index=delimiter_labels.index(catalog_delimiter_label), key="preparation_catalog_delimiter")
+                catalog_delimiter = DELIMITER_OPTIONS[catalog_label]
+                catalog_headers, catalog_rows = read_csv_rows(catalog_bytes, catalog_delimiter)
+                _, supplier_rows = read_csv_rows(file_bytes, delimiter)
+
+                st.markdown("**Mapeo para preparar productos nuevos**")
+                left, right = st.columns(2)
+                with left:
+                    prep_sku = st.selectbox("SKU del proveedor", headers, index=headers.index(current_mapping["sku"]), key="prep_sku")
+                    prep_name = st.selectbox("Nombre del producto", headers, index=headers.index(current_mapping["name"]), key="prep_name")
+                    prep_category = st.selectbox("Categoría del proveedor", headers, index=suggest_column(headers, ("CATEGORIA", "CATEGORY", "PRODUCT_CATEGORY")), key="prep_category")
+                with right:
+                    prep_price = st.selectbox("Precio para selección", headers, index=headers.index(current_mapping["price"]), key="prep_price")
+                    prep_catalog_sku = st.selectbox("SKU en WooCommerce", catalog_headers, index=suggest_column(catalog_headers, ("SKU", "Product SKU")), key="prep_catalog_sku")
+                    stock_options = ["— Sin filtro de stock —"] + headers
+                    prep_stock = st.selectbox("Stock del proveedor (opcional)", stock_options, key="prep_stock")
+
+                categories = sorted({str(row.get(prep_category, "")).strip() for row in supplier_rows if str(row.get(prep_category, "")).strip()}, key=str.casefold)
+                selected_categories = st.multiselect("Categorías habilitadas para este lote", categories, default=[], key="prep_enabled_categories", help="Elegí explícitamente qué categorías incluir.")
+                category_limits = {}
+                if selected_categories:
+                    st.markdown("**Límite de productos por categoría**")
+                    limit_columns = st.columns(min(3, len(selected_categories)))
+                    for index, category in enumerate(selected_categories):
+                        with limit_columns[index % len(limit_columns)]:
+                            category_limits[category] = st.number_input(category, min_value=0, value=5, step=1, key=f"prep_limit_{index}_{normalize_header(category)}")
+
+                apply_stock_filter = False
+                minimum_stock = None
+                if prep_stock != "— Sin filtro de stock —":
+                    apply_stock_filter = st.checkbox("Aplicar stock mínimo", value=False, key="prep_apply_stock_minimum")
+                    if apply_stock_filter:
+                        minimum_stock = st.number_input("Stock mínimo", min_value=0, value=1, step=1, key="prep_minimum_stock")
+
+                required_mapping = [prep_sku, prep_name, prep_price, prep_category]
+                mapping_error = len(set(required_mapping)) != len(required_mapping) or prep_stock in required_mapping
+                if mapping_error:
+                    st.error("SKU, nombre, precio y categoría deben usar columnas diferentes. La columna de stock también debe ser distinta.")
+
+                if st.button("Preparar selección de productos", type="primary", use_container_width=True, disabled=not selected_categories or mapping_error, key="run_catalog_preparation"):
+                    try:
+                        selection_config = {"category_column": prep_category, "price_column": prep_price, "category_limits": category_limits}
+                        if prep_stock != "— Sin filtro de stock —":
+                            selection_config["stock_column"] = prep_stock
+                        if apply_stock_filter:
+                            selection_config["minimum_stock"] = minimum_stock
+                        preparation = prepare_catalog(supplier_rows, catalog_rows, selection_config=selection_config, supplier_columns={"sku": prep_sku, "name": prep_name, "price": prep_price, "catalog_sku": prep_catalog_sku})
+                        review_rows = make_preparation_review(preparation)
+                        review_fields = ["CSV row", "SKU", "Category", "Price", "Status", "Reason code", "Reason", "Category position"]
+                        selected_fields = ["SKU", "Name", "Regular price", "Published", "Type"]
+                        st.session_state["catalog_preparation"] = {"result": preparation, "review_rows": review_rows, "review_csv": make_dict_rows_csv(review_rows, review_fields), "selected_csv": make_dict_rows_csv(preparation["export_rows"], selected_fields)}
+                    except (OSError, UnicodeError, csv.Error, ValueError, TypeError) as exc:
+                        st.error(f"No se pudo preparar el catálogo: {exc}")
+                        st.session_state.pop("catalog_preparation", None)
+            except (UnicodeDecodeError, csv.Error, ValueError) as exc:
+                st.error(f"No se pudo leer la exportación de WooCommerce: {exc}")
+
+prep_result = st.session_state.get("catalog_preparation")
+if prep_result:
+    st.subheader("Resultado de preparación")
+    preparation = prep_result["result"]
+    summary = preparation["summary"]
+    metrics = st.columns(4)
+    metrics[0].metric("Filas proveedor", summary["supplier_rows"])
+    metrics[1].metric("Nuevos aptos", summary["new_ready"])
+    metrics[2].metric("Seleccionados", summary["exported"])
+    metrics[3].metric("Existentes excluidos", summary["excluded_existing"])
+    detail_metrics = st.columns(3)
+    detail_metrics[0].metric("Bloqueados", summary["blocked"])
+    detail_metrics[1].metric("En revisión", summary["review"])
+    detail_metrics[2].metric("Aptos fuera del límite", summary["ready_not_selected"])
+    if preparation["export_rows"]:
+        st.success(f"Se prepararon {summary[chr(101)+chr(120)+chr(112)+chr(111)+chr(114)+chr(116)+chr(101)+chr(100)]} producto(s). La salida mantiene Published=0 y Type=simple.")
+    else:
+        st.warning("No hay productos seleccionados con la configuración actual.")
+    st.markdown("**Detalle de selección**")
+    if prep_result["review_rows"]:
+        st.dataframe(prep_result["review_rows"], hide_index=True, use_container_width=True)
+    else:
+        st.info("No hay filas aptas para selección con las categorías configuradas.")
+    downloads = st.columns(2)
+    downloads[0].download_button("Descargar productos seleccionados CSV", data=prep_result["selected_csv"], file_name="catalog_preparation_selected.csv", mime="text/csv", use_container_width=True, disabled=not preparation["export_rows"])
+    downloads[1].download_button("Descargar revisión CSV", data=prep_result["review_csv"], file_name="catalog_preparation_review.csv", mime="text/csv", use_container_width=True)
+    st.caption("La exportación contiene SKU, nombre, precio, Published y Type. No es todavía un archivo universal de importación WooCommerce.")
+
+st.divider()
+st.caption("Versión inicial de la interfaz · Análisis local · Sin conexión a WooCommerce · Sin escritura sobre el archivo fuente") · Análisis local · Sin conexión a WooCommerce · Sin escritura sobre el archivo fuente")
