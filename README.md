@@ -1,4 +1,14 @@
+<div align="center">
+
 # WooCommerce Catalog Toolkit
+
+**Local CSV validation, catalog comparison, and controlled product preparation for WooCommerce.**
+
+<img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
+<img src="https://img.shields.io/badge/Interface-Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit interface" />
+<img src="https://img.shields.io/badge/Status-Early%20development-64748B" alt="Early development" />
+
+</div>
 
 Small Python utilities for auditing supplier catalog data and preparing controlled product-data changes for WooCommerce review.
 
@@ -34,7 +44,7 @@ Small Python utilities for auditing supplier catalog data and preparing controll
 | Prepare a limited set of new products by category | Catalog Preparation | Selected product rows and classification/selection details |
 | Review CSV validation in a browser without using the CLI | Streamlit interface | A local upload, preview, validation, and report-download workflow |
 
-These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. SKU preflight is a screening aid, not proof that a product is new. Catalog Preparation combines new-product classification with category-based selection, but its workflow is currently available through the Python application layer, not the Streamlit interface.
+These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. SKU preflight is a screening aid, not proof that a product is new. Catalog Preparation combines new-product classification with category-based selection. The workflow is available through both the Python application layer and the local Streamlit interface.
 
 ## Recommended catalog-preparation workflow
 
@@ -276,7 +286,7 @@ The workflow returns:
 
 This is a preparation result, not a complete WooCommerce import contract. It does not currently map images, categories, attributes, tax, shipping, variations, or arbitrary supplier fields. It does not connect to WooCommerce, import, update, delete, or publish products. Selected products are explicitly prepared as unpublished simple products (`Published=0`, `Type=simple`).
 
-**Current interface limitation:** the Streamlit interface described below exposes CSV validation only. Category-based catalog preparation is not yet available through that interface.
+**Interface availability:** category-based catalog preparation is available in the Streamlit interface. It requires both the supplier CSV and a current WooCommerce catalog export.
 
 ## Local graphical interface (first version)
 
