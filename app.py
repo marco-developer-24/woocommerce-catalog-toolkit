@@ -441,6 +441,7 @@ st.header("Preparación de catálogo")
 st.write("Seleccioná productos nuevos para un lote por categoría. Se comparan los SKU contra una exportación de WooCommerce. Esta etapa no importa ni publica productos.")
 st.caption("Regla actual: dentro de cada categoría se priorizan los productos elegibles de menor precio. Revisá el resultado antes de continuar.")
 
+current_preparation_signature = None
 with st.container(border=True):
     catalog_file = st.file_uploader("Exportación actual de productos WooCommerce", type=["csv"], key="preparation_catalog_file")
     if catalog_file is not None:
@@ -486,6 +487,14 @@ with st.container(border=True):
                     if apply_stock_filter:
                         minimum_stock = st.number_input("Stock mínimo", min_value=0, value=1, step=1, key="prep_minimum_stock")
 
+                current_preparation_signature = (
+                    hashlib.sha256(file_bytes).hexdigest(),
+                    hashlib.sha256(catalog_bytes).hexdigest(),
+                    delimiter, catalog_delimiter, prep_sku, prep_name,
+                    prep_price, prep_category, prep_catalog_sku, prep_stock,
+                    tuple(sorted(category_limits.items())),
+                    minimum_stock if apply_stock_filter else None,
+                )
                 required_mapping = [prep_sku, prep_name, prep_price, prep_category]
                 mapping_error = len(set(required_mapping)) != len(required_mapping) or prep_stock in required_mapping
                 if mapping_error:
@@ -502,21 +511,7 @@ with st.container(border=True):
                         review_rows = build_preparation_review(preparation, prep_category, prep_price)
                         review_fields = ["CSV row", "SKU", "Category", "Price", "Status", "Reason code", "Reason", "Category position"]
                         selected_fields = ["SKU", "Name", "Regular price", "Published", "Type"]
-                        prep_signature = (
-                            hashlib.sha256(file_bytes).hexdigest(),
-                            hashlib.sha256(catalog_bytes).hexdigest(),
-                            delimiter,
-                            catalog_delimiter,
-                            prep_sku,
-                            prep_name,
-                            prep_price,
-                            prep_category,
-                            prep_catalog_sku,
-                            prep_stock,
-                            tuple(sorted(category_limits.items())),
-                            minimum_stock if apply_stock_filter else None,
-                        )
-                        st.session_state["catalog_preparation"] = {"result": preparation, "review_rows": review_rows, "review_csv": make_dict_rows_csv(review_rows, review_fields), "selected_csv": make_dict_rows_csv(preparation["export_rows"], selected_fields), "signature": prep_signature}
+                        st.session_state["catalog_preparation"] = {"result": preparation, "review_rows": review_rows, "review_csv": make_dict_rows_csv(review_rows, review_fields), "selected_csv": make_dict_rows_csv(preparation["export_rows"], selected_fields), "signature": current_preparation_signature}
                     except (OSError, UnicodeError, csv.Error, ValueError, TypeError) as exc:
                         st.error(f"No se pudo preparar el catálogo: {exc}")
                         st.session_state.pop("catalog_preparation", None)
@@ -524,7 +519,7 @@ with st.container(border=True):
                 st.error(f"No se pudo leer la exportación de WooCommerce: {exc}")
 
 prep_result = st.session_state.get("catalog_preparation")
-if prep_result:
+if prep_result and prep_result.get("signature") == current_preparation_signature:
     st.subheader("Resultado de preparación")
     preparation = prep_result["result"]
     summary = preparation["summary"]
