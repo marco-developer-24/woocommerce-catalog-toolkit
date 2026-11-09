@@ -40,7 +40,7 @@ The original input files must remain unchanged.
 | New-product preflight | Supplier CSV and WooCommerce catalog export | Compare SKUs and classify candidate, review, and existing rows | Python operation / CLI |
 | Catalog Update Planner | Supplier CSV and WooCommerce catalog export | Compare configured price and stock fields for unambiguous SKU matches | Python operation / CLI |
 | Image URL Auditor | CSV containing image URLs | Check URL response details and summarize outcomes | Python CLI |
-| Catalog Preparation | Supplier rows, catalog rows, column mappings, category limits | Classify new products, apply category selection to eligible rows, and return review data | Python application layer; not yet exposed in Streamlit |
+| Catalog Preparation | Supplier rows, catalog rows, column mappings, category limits | Classify new products, apply category selection to eligible rows, and return review data | Python application layer and first Streamlit workflow |
 
 The modules have different input requirements. The interface must explain those requirements before asking the user to upload files.
 
@@ -121,6 +121,8 @@ Every report should explain the classification and, where possible, identify the
 - Selection is deterministic: the same inputs and configuration produce the same result.
 - The UI does not describe lowest-price selection as a balanced or quality-based recommendation.
 - No product is published or sent to WooCommerce by this workflow.
+- The Streamlit workflow downloads a selected-products CSV and a row-level review CSV containing all classification outcomes and reasons.
+- Preparation results are invalidated when either source file or any relevant mapping, delimiter, category limit, or stock setting changes.
 
 ### Comparison
 
@@ -136,6 +138,7 @@ Every report should explain the classification and, where possible, identify the
 - Each workflow explains its purpose, required files, and next step.
 - Narrow viewports remain usable; tables must not be the only way to understand important findings.
 - Users can distinguish functionality available in the interface from functionality currently available only through the Python layer or CLI.
+- The preparation workflow requires a supplier CSV and a current WooCommerce catalog export, and clearly labels the limited fields included in its output.
 
 ## Explicitly out of scope for this MVP
 
@@ -161,6 +164,6 @@ These capabilities can be reconsidered only after the local preparation and revi
 
 ## MVP completion signal
 
-A store operator unfamiliar with the repository can load a supplier file and a current catalog export, understand validation findings, configure category limits, review selected and excluded rows with reasons, and download a traceable preparation report without developer assistance.
+A store operator unfamiliar with the repository can load a supplier file and a current catalog export in the Streamlit interface, understand validation findings, configure category limits, review selected and excluded rows with reasons, and download a traceable preparation report without developer assistance.
 
 This should be verified through observed usability sessions using representative supplier data, not assumed from a successful automated test suite.
