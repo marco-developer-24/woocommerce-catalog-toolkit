@@ -104,7 +104,7 @@ class TestReadCsvPreview(unittest.TestCase):
 
 class TestReadCsvRows(unittest.TestCase):
     def test_reads_all_rows_and_utf8_bom(self):
-        content = "\\ufeffsku,name\\n1,First\\n2,Second\\n".encode("utf-8")
+        content = "\ufeffsku,name\n1,First\n2,Second\n".encode("utf-8")
 
         headers, rows = read_csv_rows(content, ",")
 
@@ -115,13 +115,13 @@ class TestReadCsvRows(unittest.TestCase):
         ])
 
     def test_rejects_malformed_rows_after_preview_range(self):
-        content = b"sku,name\\n1,First\\n2\\n"
+        content = b"sku,name\n1,First\n2\n"
 
         with self.assertRaisesRegex(ValueError, "fila 3"):
             read_csv_rows(content, ",")
 
     def test_does_not_modify_source_bytes(self):
-        content = b"sku,name\\n1,First\\n"
+        content = b"sku,name\n1,First\n"
         original = content[:]
 
         read_csv_rows(content, ",")
