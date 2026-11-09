@@ -547,4 +547,4 @@ if prep_result and prep_result.get("signature") == current_preparation_signature
     st.caption("La exportación contiene SKU, nombre, precio, Published y Type. No es todavía un archivo universal de importación WooCommerce.")
 
 st.divider()
-st.caption("Versión inicial de la interfaz · Análisis local · Sin conexión a WooCommerce · Sin escritura sobre el archivo fuente") · Análisis local · Sin conexión a WooCommerce · Sin escritura sobre el archivo fuente")
+st.caption("Validador y preparación local · Sin conexión a WooCommerce · Sin escritura sobre los archivos fuente")
