@@ -10,6 +10,7 @@ import streamlit as st
 
 from src.application.catalog_validation import run_catalog_validation
 from src.application.catalog_preparation import prepare_catalog
+from src.application.catalog_preparation_report import build_preparation_review
 from src.application.catalog_input import read_csv_rows
 from src.catalog_csv_report import REPORT_FIELDS, build_catalog_report, filter_catalog_issues
 from src.application.catalog_input import detect_delimiter, read_csv_preview
@@ -30,44 +31,6 @@ def make_dict_rows_csv(rows, fieldnames):
     writer.writeheader()
     writer.writerows(rows)
     return ('\ufeff' + output.getvalue()).encode('utf-8')
-
-def make_preparation_review(result, category_column, price_column):
-    selected_by_row = {
-        item["row_number"]: item
-        for item in result["selection"]["items"]
-    }
-    rows = []
-    for status in ("READY", "REVIEW", "BLOCKED", "EXCLUDED"):
-        for operation_item in result["add_products"][status]:
-            source_row = operation_item["row"]
-            selection_item = selected_by_row.get(operation_item["row_number"])
-            rows.append({
-                "CSV row": operation_item["row_number"],
-                "SKU": operation_item["sku"],
-                "Category": source_row.get(category_column, ""),
-                "Price": source_row.get(price_column, ""),
-                "Status": (
-                    selection_item["status"]
-                    if selection_item is not None
-                    else operation_item["status"]
-                ),
-                "Reason code": (
-                    selection_item["reason_code"]
-                    if selection_item is not None
-                    else operation_item["match_status"]
-                ),
-                "Reason": (
-                    selection_item["reason"]
-                    if selection_item is not None
-                    else operation_item["reason"]
-                ),
-                "Category position": (
-                    selection_item["category_position"]
-                    if selection_item is not None
-                    else None
-                ),
-            })
-    return sorted(rows, key=lambda item: item["CSV row"])
 
 def make_issues_csv(issues):
     output = io.StringIO(newline="")
@@ -536,7 +499,7 @@ with st.container(border=True):
                         if apply_stock_filter:
                             selection_config["minimum_stock"] = minimum_stock
                         preparation = prepare_catalog(supplier_rows, catalog_rows, selection_config=selection_config, supplier_columns={"sku": prep_sku, "name": prep_name, "price": prep_price, "catalog_sku": prep_catalog_sku})
-                        review_rows = make_preparation_review(preparation, prep_category, prep_price)
+                        review_rows = build_preparation_review(preparation, prep_category, prep_price)
                         review_fields = ["CSV row", "SKU", "Category", "Price", "Status", "Reason code", "Reason", "Category position"]
                         selected_fields = ["SKU", "Name", "Regular price", "Published", "Type"]
                         prep_signature = (
