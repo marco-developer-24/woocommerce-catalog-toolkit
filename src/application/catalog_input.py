@@ -60,5 +60,10 @@ def read_csv_rows(file_bytes, delimiter):
 
 def read_csv_preview(file_bytes, delimiter, limit=10):
     """Read CSV headers and a small preview without changing uploaded bytes."""
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        raise TypeError("limit must be an integer.")
+    if limit < 0:
+        raise ValueError("limit must not be negative.")
+
     headers, rows, blank_columns = _read_csv(file_bytes, delimiter)
     return headers, rows[:limit], len(rows), blank_columns

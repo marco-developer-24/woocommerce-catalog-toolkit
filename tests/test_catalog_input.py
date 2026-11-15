@@ -52,6 +52,30 @@ class TestReadCsvPreview(unittest.TestCase):
         self.assertEqual(total_rows, 3)
         self.assertEqual(blank_columns, 0)
 
+    def test_zero_preview_limit_returns_no_preview_rows(self):
+        content = b"sku,name\\n1,A\\n2,B\\n"
+
+        headers, preview, total_rows, blank_columns = read_csv_preview(
+            content, ",", limit=0
+        )
+
+        self.assertEqual(headers, ["sku", "name"])
+        self.assertEqual(preview, [])
+        self.assertEqual(total_rows, 2)
+        self.assertEqual(blank_columns, 0)
+
+    def test_rejects_negative_preview_limit(self):
+        with self.assertRaisesRegex(ValueError, "must not be negative"):
+            read_csv_preview(b"sku,name\\n1,A\\n", ",", limit=-1)
+
+    def test_rejects_non_integer_preview_limit(self):
+        with self.assertRaisesRegex(TypeError, "must be an integer"):
+            read_csv_preview(b"sku,name\\n1,A\\n", ",", limit="1")
+
+    def test_rejects_boolean_preview_limit(self):
+        with self.assertRaisesRegex(TypeError, "must be an integer"):
+            read_csv_preview(b"sku,name\\n1,A\\n", ",", limit=True)
+
     def test_ignores_empty_header_only_when_its_column_has_no_data(self):
         content = "sku,,name\n1,,Keyboard\n".encode("utf-8")
 
