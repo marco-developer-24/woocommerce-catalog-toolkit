@@ -17,7 +17,7 @@ from src.application.catalog_exports import (
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_preparation_report import build_preparation_review
 from src.catalog_csv_report import filter_catalog_issues
-from src.application.catalog_input import detect_delimiter, get_cached_csv_data
+from src.application.catalog_input import detect_delimiter, get_cached_csv_data, read_csv_preview
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 DELIMITER_OPTIONS = {
@@ -58,6 +58,7 @@ with st.container(border=True):
     uploaded_file = st.file_uploader("Cargá el CSV del proveedor", type=["csv"])
     if uploaded_file is None:
         st.session_state.pop("provider_csv_cache", None)
+        st.session_state.pop("preparation_catalog_csv_cache", None)
         st.info("Subí un archivo CSV para comenzar. Se aceptan archivos UTF-8 y UTF-8 con BOM.")
         st.stop()
 
@@ -88,12 +89,17 @@ with st.container(border=True):
     delimiter = DELIMITER_OPTIONS[selected_label]
 
     try:
-        provider_cache = st.session_state.setdefault("provider_csv_cache", {})
-        headers, all_supplier_rows, ignored_empty_columns = get_cached_csv_data(
-            provider_cache, file_hash, file_bytes, delimiter
-        )
-        total_rows = len(all_supplier_rows)
-        preview = all_supplier_rows[:20]
+        provider_cache = st.session_state.get("provider_csv_cache", {})
+        if provider_cache.get("key") == (file_hash, delimiter):
+            headers, all_supplier_rows, ignored_empty_columns = provider_cache["data"]
+            total_rows = len(all_supplier_rows)
+            preview = all_supplier_rows[:20]
+        else:
+            provider_cache.clear()
+            headers, preview, total_rows, ignored_empty_columns = read_csv_preview(
+                file_bytes, delimiter, limit=20
+            )
+            all_supplier_rows = None
     except (UnicodeDecodeError, csv.Error, ValueError) as exc:
         st.error(f"No se pudo interpretar el CSV: {exc}")
         st.stop()
@@ -405,7 +411,10 @@ with st.container(border=True):
                 catalog_headers, catalog_rows, _ = get_cached_csv_data(
                     catalog_cache, catalog_hash, catalog_bytes, catalog_delimiter
                 )
-                supplier_rows = all_supplier_rows
+                provider_cache = st.session_state.setdefault("provider_csv_cache", {})
+                _, supplier_rows, _ = get_cached_csv_data(
+                    provider_cache, file_hash, file_bytes, delimiter
+                )
 
                 st.markdown("**Mapeo para preparar productos nuevos**")
                 left, right = st.columns(2)
@@ -468,6 +477,7 @@ with st.container(border=True):
                 st.error(f"No se pudo leer la exportación de WooCommerce: {exc}")
     else:
         st.session_state.pop("preparation_catalog_csv_cache", None)
+        st.session_state.pop("provider_csv_cache", None)
 
 prep_result = st.session_state.get("catalog_preparation")
 if prep_result and prep_result.get("signature") == current_preparation_signature:
