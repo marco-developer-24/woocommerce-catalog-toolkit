@@ -13,7 +13,8 @@ class TestLocalUiSyntax(unittest.TestCase):
         source = app_path.read_text(encoding="utf-8")
 
         self.assertIn("from src.application.catalog_preparation import prepare_catalog", source)
-        self.assertIn("from src.application.catalog_input import read_csv_rows", source)
+        self.assertIn("get_cached_csv_data", source)
+        self.assertIn("read_csv_preview", source)
         self.assertIn("preparation_catalog_file", source)
         self.assertIn("Categorías habilitadas para este lote", source)
         self.assertIn("catalog_preparation_selected.csv", source)
