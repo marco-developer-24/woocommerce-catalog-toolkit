@@ -1,6 +1,13 @@
 import unittest
+from unittest.mock import patch
 
-from src.application.catalog_input import detect_delimiter, read_csv_preview, read_csv_rows
+import src.application.catalog_input as catalog_input
+from src.application.catalog_input import (
+    detect_delimiter,
+    get_cached_csv_data,
+    read_csv_preview,
+    read_csv_rows,
+)
 
 
 class TestDetectDelimiter(unittest.TestCase):
@@ -151,6 +158,54 @@ class TestReadCsvRows(unittest.TestCase):
         read_csv_rows(content, ",")
 
         self.assertEqual(content, original)
+
+
+class TestGetCachedCsvData(unittest.TestCase):
+    def test_reuses_parsed_data_for_same_fingerprint_and_delimiter(self):
+        cache = {}
+        content = b"sku,name\\n1,Keyboard\\n"
+
+        with patch.object(catalog_input, "read_csv_data", wraps=catalog_input.read_csv_data) as read:
+            first = get_cached_csv_data(cache, "file-a", content, ",")
+            second = get_cached_csv_data(cache, "file-a", content, ",")
+
+        self.assertIs(first, second)
+        self.assertEqual(read.call_count, 1)
+
+    def test_reparses_when_file_fingerprint_changes(self):
+        cache = {}
+        first_content = b"sku,name\\n1,Keyboard\\n"
+        second_content = b"sku,name\\n2,Mouse\\n"
+
+        first = get_cached_csv_data(cache, "file-a", first_content, ",")
+        second = get_cached_csv_data(cache, "file-b", second_content, ",")
+
+        self.assertEqual(first[1][0]["sku"], "1")
+        self.assertEqual(second[1][0]["sku"], "2")
+        self.assertEqual(cache["key"], ("file-b", ","))
+
+    def test_reparses_when_delimiter_changes(self):
+        cache = {}
+        comma_content = b"sku,name\\n1,Keyboard\\n"
+        semicolon_content = b"sku;name\\n2;Mouse\\n"
+
+        get_cached_csv_data(cache, "same-file", comma_content, ",")
+        result = get_cached_csv_data(cache, "same-file", semicolon_content, ";")
+
+        self.assertEqual(result[0], ["sku", "name"])
+        self.assertEqual(result[1][0]["name"], "Mouse")
+        self.assertEqual(cache["key"], ("same-file", ";"))
+
+    def test_does_not_keep_stale_data_when_new_input_is_invalid(self):
+        cache = {}
+        valid_content = b"sku,name\\n1,Keyboard\\n"
+        get_cached_csv_data(cache, "file-a", valid_content, ",")
+
+        with self.assertRaises(ValueError):
+            get_cached_csv_data(cache, "file-b", b"", ",")
+
+        self.assertEqual(cache, {})
+
 
 if __name__ == "__main__":
     unittest.main()
