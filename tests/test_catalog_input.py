@@ -163,7 +163,7 @@ class TestReadCsvRows(unittest.TestCase):
 class TestGetCachedCsvData(unittest.TestCase):
     def test_reuses_parsed_data_for_same_fingerprint_and_delimiter(self):
         cache = {}
-        content = b"sku,name\\n1,Keyboard\\n"
+        content = b"sku,name\n1,Keyboard\n"
 
         with patch.object(catalog_input, "read_csv_data", wraps=catalog_input.read_csv_data) as read:
             first = get_cached_csv_data(cache, "file-a", content, ",")
@@ -174,8 +174,8 @@ class TestGetCachedCsvData(unittest.TestCase):
 
     def test_reparses_when_file_fingerprint_changes(self):
         cache = {}
-        first_content = b"sku,name\\n1,Keyboard\\n"
-        second_content = b"sku,name\\n2,Mouse\\n"
+        first_content = b"sku,name\n1,Keyboard\n"
+        second_content = b"sku,name\n2,Mouse\n"
 
         first = get_cached_csv_data(cache, "file-a", first_content, ",")
         second = get_cached_csv_data(cache, "file-b", second_content, ",")
@@ -186,8 +186,8 @@ class TestGetCachedCsvData(unittest.TestCase):
 
     def test_reparses_when_delimiter_changes(self):
         cache = {}
-        comma_content = b"sku,name\\n1,Keyboard\\n"
-        semicolon_content = b"sku;name\\n2;Mouse\\n"
+        comma_content = b"sku,name\n1,Keyboard\n"
+        semicolon_content = b"sku;name\n2;Mouse\n"
 
         get_cached_csv_data(cache, "same-file", comma_content, ",")
         result = get_cached_csv_data(cache, "same-file", semicolon_content, ";")
@@ -198,7 +198,7 @@ class TestGetCachedCsvData(unittest.TestCase):
 
     def test_does_not_keep_stale_data_when_new_input_is_invalid(self):
         cache = {}
-        valid_content = b"sku,name\\n1,Keyboard\\n"
+        valid_content = b"sku,name\n1,Keyboard\n"
         get_cached_csv_data(cache, "file-a", valid_content, ",")
 
         with self.assertRaises(ValueError):
