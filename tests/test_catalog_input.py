@@ -53,7 +53,7 @@ class TestReadCsvPreview(unittest.TestCase):
         self.assertEqual(blank_columns, 0)
 
     def test_zero_preview_limit_returns_no_preview_rows(self):
-        content = b"sku,name\\n1,A\\n2,B\\n"
+        content = b"sku,name\n1,A\n2,B\n"
 
         headers, preview, total_rows, blank_columns = read_csv_preview(
             content, ",", limit=0
@@ -66,11 +66,11 @@ class TestReadCsvPreview(unittest.TestCase):
 
     def test_rejects_negative_preview_limit(self):
         with self.assertRaisesRegex(ValueError, "must not be negative"):
-            read_csv_preview(b"sku,name\\n1,A\\n", ",", limit=-1)
+            read_csv_preview(b"sku,name\n1,A\n", ",", limit=-1)
 
     def test_rejects_non_integer_preview_limit(self):
         with self.assertRaisesRegex(TypeError, "must be an integer"):
-            read_csv_preview(b"sku,name\\n1,A\\n", ",", limit="1")
+            read_csv_preview(b"sku,name\n1,A\n", ",", limit="1")
 
     def test_rejects_boolean_preview_limit(self):
         with self.assertRaisesRegex(TypeError, "must be an integer"):
