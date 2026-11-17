@@ -52,9 +52,14 @@ def _read_csv(file_bytes, delimiter):
     return headers, rows, len(blank_positions)
 
 
+def read_csv_data(file_bytes, delimiter):
+    """Read and validate all CSV rows, returning headers, rows, and blank-column count."""
+    return _read_csv(file_bytes, delimiter)
+
+
 def read_csv_rows(file_bytes, delimiter):
     """Read every CSV row as a dictionary without modifying source bytes."""
-    headers, rows, _ = _read_csv(file_bytes, delimiter)
+    headers, rows, _ = read_csv_data(file_bytes, delimiter)
     return headers, rows
 
 
@@ -65,5 +70,17 @@ def read_csv_preview(file_bytes, delimiter, limit=10):
     if limit < 0:
         raise ValueError("limit must not be negative.")
 
-    headers, rows, blank_columns = _read_csv(file_bytes, delimiter)
+    headers, rows, blank_columns = read_csv_data(file_bytes, delimiter)
     return headers, rows[:limit], len(rows), blank_columns
+
+
+def get_cached_csv_data(cache, fingerprint, file_bytes, delimiter):
+    """Reuse parsed CSV data while its content fingerprint and delimiter remain unchanged."""
+    cache_key = (fingerprint, delimiter)
+    if cache.get("key") == cache_key:
+        return cache["data"]
+
+    cache.clear()
+    data = read_csv_data(file_bytes, delimiter)
+    cache.update({"key": cache_key, "data": data})
+    return data
