@@ -74,7 +74,7 @@ class TestReadCsvPreview(unittest.TestCase):
 
     def test_rejects_boolean_preview_limit(self):
         with self.assertRaisesRegex(TypeError, "must be an integer"):
-            read_csv_preview(b"sku,name\\n1,A\\n", ",", limit=True)
+            read_csv_preview(b"sku,name\n1,A\n", ",", limit=True)
 
     def test_ignores_empty_header_only_when_its_column_has_no_data(self):
         content = "sku,,name\n1,,Keyboard\n".encode("utf-8")
