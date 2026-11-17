@@ -13,7 +13,7 @@ def detect_delimiter(sample):
 
 
 def _read_csv(file_bytes, delimiter, row_limit=None):
-    """Read all rows while enforcing the shared CSV structure rules."""
+    """Validate CSV rows while optionally retaining only the requested preview."""
     if not isinstance(file_bytes, bytes):
         raise TypeError("file_bytes must be bytes.")
 
