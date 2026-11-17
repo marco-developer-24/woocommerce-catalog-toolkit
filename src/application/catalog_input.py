@@ -12,7 +12,7 @@ def detect_delimiter(sample):
         return ";"
 
 
-def _read_csv(file_bytes, delimiter):
+def _read_csv(file_bytes, delimiter, row_limit=None):
     """Read all rows while enforcing the shared CSV structure rules."""
     if not isinstance(file_bytes, bytes):
         raise TypeError("file_bytes must be bytes.")
@@ -33,6 +33,7 @@ def _read_csv(file_bytes, delimiter):
         raise ValueError("El CSV contiene nombres de columna duplicados.")
 
     rows = []
+    total_rows = 0
     for row_number, values in enumerate(reader, start=2):
         if len(values) != len(raw_headers):
             raise ValueError(
@@ -44,17 +45,20 @@ def _read_csv(file_bytes, delimiter):
                     f"La columna {position + 1} no tiene encabezado, "
                     f"pero contiene datos en la fila {row_number}."
                 )
-        rows.append({
-            header: values[index]
-            for index, header in enumerate(raw_headers)
-            if header.strip()
-        })
-    return headers, rows, len(blank_positions)
+        total_rows += 1
+        if row_limit is None or len(rows) < row_limit:
+            rows.append({
+                header: values[index]
+                for index, header in enumerate(raw_headers)
+                if header.strip()
+            })
+    return headers, rows, len(blank_positions), total_rows
 
 
 def read_csv_data(file_bytes, delimiter):
     """Read and validate all CSV rows, returning headers, rows, and blank-column count."""
-    return _read_csv(file_bytes, delimiter)
+    headers, rows, blank_columns, _ = _read_csv(file_bytes, delimiter)
+    return headers, rows, blank_columns
 
 
 def read_csv_rows(file_bytes, delimiter):
@@ -64,14 +68,16 @@ def read_csv_rows(file_bytes, delimiter):
 
 
 def read_csv_preview(file_bytes, delimiter, limit=10):
-    """Read CSV headers and a small preview without changing uploaded bytes."""
+    """Validate the full CSV while retaining only the requested preview rows."""
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise TypeError("limit must be an integer.")
     if limit < 0:
         raise ValueError("limit must not be negative.")
 
-    headers, rows, blank_columns = read_csv_data(file_bytes, delimiter)
-    return headers, rows[:limit], len(rows), blank_columns
+    headers, rows, blank_columns, total_rows = _read_csv(
+        file_bytes, delimiter, row_limit=limit
+    )
+    return headers, rows, total_rows, blank_columns
 
 
 def get_cached_csv_data(cache, fingerprint, file_bytes, delimiter):
