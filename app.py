@@ -57,6 +57,7 @@ st.write(
 with st.container(border=True):
     uploaded_file = st.file_uploader("Cargá el CSV del proveedor", type=["csv"])
     if uploaded_file is None:
+        st.session_state.pop("provider_csv_cache", None)
         st.info("Subí un archivo CSV para comenzar. Se aceptan archivos UTF-8 y UTF-8 con BOM.")
         st.stop()
 
@@ -390,6 +391,7 @@ with st.container(border=True):
     if catalog_file is not None:
         catalog_bytes = catalog_file.getvalue()
         if len(catalog_bytes) > MAX_UPLOAD_BYTES:
+            st.session_state.pop("preparation_catalog_csv_cache", None)
             st.error("La exportación supera el límite de 50 MB.")
         else:
             try:
@@ -464,6 +466,8 @@ with st.container(border=True):
                         st.session_state.pop("catalog_preparation", None)
             except (UnicodeDecodeError, csv.Error, ValueError) as exc:
                 st.error(f"No se pudo leer la exportación de WooCommerce: {exc}")
+    else:
+        st.session_state.pop("preparation_catalog_csv_cache", None)
 
 prep_result = st.session_state.get("catalog_preparation")
 if prep_result and prep_result.get("signature") == current_preparation_signature:
