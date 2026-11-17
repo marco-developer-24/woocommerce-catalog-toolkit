@@ -16,9 +16,10 @@ from src.application.catalog_exports import (
 )
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_preparation_report import build_preparation_review
-from src.application.catalog_input import read_csv_rows
-from src.catalog_csv_report import filter_catalog_issues
-from src.application.catalog_input import detect_delimiter, read_csv_preview
+from src.application.catalog_input import (
+    detect_delimiter,
+    get_cached_csv_data,
+)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 DELIMITER_OPTIONS = {
@@ -62,6 +63,7 @@ with st.container(border=True):
         st.stop()
 
     file_bytes = uploaded_file.getvalue()
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         st.error("El archivo supera el límite de 50 MB para esta primera versión.")
         st.stop()
@@ -87,7 +89,12 @@ with st.container(border=True):
     delimiter = DELIMITER_OPTIONS[selected_label]
 
     try:
-        headers, preview, total_rows, ignored_empty_columns = read_csv_preview(file_bytes, delimiter)
+        provider_cache = st.session_state.setdefault("provider_csv_cache", {})
+        headers, all_supplier_rows, ignored_empty_columns = get_cached_csv_data(
+            provider_cache, file_hash, file_bytes, delimiter
+        )
+        total_rows = len(all_supplier_rows)
+        preview = all_supplier_rows[:20]
     except (UnicodeDecodeError, csv.Error, ValueError) as exc:
         st.error(f"No se pudo interpretar el CSV: {exc}")
         st.stop()
@@ -224,7 +231,7 @@ with st.container(border=True):
         st.caption("Asignación válida: cada campo utiliza una columna diferente.")
 
     current_signature = (
-        hashlib.sha256(file_bytes).hexdigest(),
+        file_hash,
         delimiter,
         current_mapping["sku"],
         current_mapping["name"],
@@ -393,8 +400,12 @@ with st.container(border=True):
                 catalog_delimiter_label = next((label for label, value in DELIMITER_OPTIONS.items() if value == detected_catalog_delimiter), delimiter_labels[0])
                 catalog_label = st.selectbox("Separador del catálogo WooCommerce", delimiter_labels, index=delimiter_labels.index(catalog_delimiter_label), key="preparation_catalog_delimiter")
                 catalog_delimiter = DELIMITER_OPTIONS[catalog_label]
-                catalog_headers, catalog_rows = read_csv_rows(catalog_bytes, catalog_delimiter)
-                _, supplier_rows = read_csv_rows(file_bytes, delimiter)
+                catalog_hash = hashlib.sha256(catalog_bytes).hexdigest()
+                catalog_cache = st.session_state.setdefault("preparation_catalog_csv_cache", {})
+                catalog_headers, catalog_rows, _ = get_cached_csv_data(
+                    catalog_cache, catalog_hash, catalog_bytes, catalog_delimiter
+                )
+                supplier_rows = all_supplier_rows
 
                 st.markdown("**Mapeo para preparar productos nuevos**")
                 left, right = st.columns(2)
@@ -426,8 +437,8 @@ with st.container(border=True):
                         minimum_stock = st.number_input("Stock mínimo", min_value=0, value=1, step=1, key="prep_minimum_stock")
 
                 current_preparation_signature = (
-                    hashlib.sha256(file_bytes).hexdigest(),
-                    hashlib.sha256(catalog_bytes).hexdigest(),
+                    file_hash,
+                    catalog_hash,
                     delimiter, catalog_delimiter, prep_sku, prep_name,
                     prep_price, prep_category, prep_catalog_sku, prep_stock,
                     tuple(sorted(category_limits.items())),
