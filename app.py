@@ -2,17 +2,22 @@
 
 import csv
 import hashlib
-import io
 import unicodedata
-import zipfile
 
 import streamlit as st
 
 from src.application.catalog_validation import run_catalog_validation
+from src.application.catalog_exports import (
+    make_dict_rows_csv,
+    make_issues_csv,
+    make_issues_text,
+    make_report_zip,
+    make_summary,
+)
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_preparation_report import build_preparation_review
 from src.application.catalog_input import read_csv_rows
-from src.catalog_csv_report import REPORT_FIELDS, build_catalog_report, filter_catalog_issues
+from src.catalog_csv_report import filter_catalog_issues
 from src.application.catalog_input import detect_delimiter, read_csv_preview
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -23,39 +28,6 @@ DELIMITER_OPTIONS = {
     "Barra vertical (|)": "|",
 }
 
-
-
-def make_dict_rows_csv(rows, fieldnames):
-    output = io.StringIO(newline='')
-    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
-    writer.writeheader()
-    writer.writerows(rows)
-    return ('\ufeff' + output.getvalue()).encode('utf-8')
-
-def make_issues_csv(issues):
-    output = io.StringIO(newline="")
-    writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(issues)
-    return ("\ufeff" + output.getvalue()).encode("utf-8")
-
-
-def make_issues_text(issues):
-    """Return a readable, copy-friendly representation of all validation issues."""
-    if not issues:
-        return "No se detectaron incidencias según las reglas actuales."
-
-    blocks = []
-    for issue in issues:
-        blocks.append(
-            f"Fila: {issue['row_number']}\n"
-            f"Campo: {issue['field']}\n"
-            f"Severidad: {issue['severity']}\n"
-            f"Código: {issue['code']}\n"
-            f"Valor: {issue['value']}\n"
-            f"Detalle: {issue['message']}"
-        )
-    return "\n\n".join(blocks)
 
 
 def normalize_header(value):
@@ -72,40 +44,6 @@ def suggest_column(headers, aliases):
         if normalize_header(header) in normalized_aliases:
             return headers.index(header)
     return 0
-
-
-def make_summary(filename, file_hash, delimiter, mapping, report, ignored_empty_columns=0):
-    lines = [
-        "WooCommerce Catalog Toolkit — Catalog CSV Validator",
-        "",
-        f"Archivo analizado: {filename}",
-        f"SHA-256: {file_hash}",
-        f"Delimitador: {delimiter!r}",
-        f"Columnas vacías sin encabezado ignoradas: {ignored_empty_columns}",
-        f"Columna SKU: {mapping['sku']}",
-        f"Columna nombre: {mapping['name']}",
-        f"Columna precio: {mapping['price']}",
-        f"Columna stock: {mapping['stock'] or 'No validada'}",
-        "",
-        f"Productos analizados: {report['total_products']}",
-        f"Productos sin errores: {report['ready_products']}",
-        f"Productos con errores: {report['products_with_errors']}",
-        f"Productos con advertencias: {report['products_with_warnings']}",
-        f"Errores detectados: {report['error_count']}",
-        f"Advertencias detectadas: {report['warning_count']}",
-        "",
-        "Este informe es una revisión de calidad de datos. No importa ni modifica productos en WooCommerce.",
-        "Los productos sin errores no quedan automáticamente aprobados para importar; requieren revisión humana.",
-    ]
-    return "\n".join(lines) + "\n"
-
-
-def make_report_zip(issues_csv, summary):
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("catalog_issues.csv", issues_csv)
-        archive.writestr("summary.txt", summary)
-    return output.getvalue()
 
 
 st.set_page_config(page_title="Catalog CSV Validator", page_icon="🧰", layout="wide")
