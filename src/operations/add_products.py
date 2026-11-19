@@ -7,7 +7,7 @@ from src.catalog_matcher import (
     STATUS_MISSING,
     classify_catalog_rows,
 )
-from .common import BLOCKED, EXCLUDED, READY, build_result, decimal_to_text, operation_item, parse_non_negative_decimal
+from .common import BLOCKED, EXCLUDED, READY, REVIEW, build_result, decimal_to_text, operation_item, parse_non_negative_decimal
 
 
 def prepare_add_products(
@@ -24,8 +24,9 @@ def prepare_add_products(
     """Classify rows for a new-products run; never changes existing products.
 
     Existing SKUs are excluded. Missing or ambiguous SKUs and invalid required
-    fields are blocked. Only unique new SKUs with a name and a finite,
-    non-negative price are marked READY. Input dictionaries are not mutated.
+    fields are blocked. When required, missing, invalid, or non-positive stock
+    is sent to REVIEW. Only unique new SKUs with valid fields and positive
+    stock are marked READY. Input dictionaries are not mutated.
     """
     classified = classify_catalog_rows(
         supplier_rows, catalog_rows, supplier_sku_column, catalog_sku_column
