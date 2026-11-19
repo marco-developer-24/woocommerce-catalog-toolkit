@@ -16,6 +16,7 @@ from src.application.catalog_exports import (
 )
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_preparation_report import build_preparation_review
+from src.application.woocommerce_categories import discover_destination_categories
 from src.catalog_csv_report import filter_catalog_issues
 from src.application.catalog_input import detect_delimiter, get_cached_csv_data, read_csv_preview
 
@@ -425,6 +426,12 @@ with st.container(border=True):
                 with right:
                     prep_price = st.selectbox("Precio para selección y exportación", headers, index=suggest_column(headers, ("PRECIO PESOS CON IVA",)), key="prep_price")
                     prep_catalog_sku = st.selectbox("SKU en WooCommerce", catalog_headers, index=suggest_column(catalog_headers, ("SKU", "Product SKU")), key="prep_catalog_sku")
+                    prep_catalog_category = st.selectbox(
+                        "Categorías de WooCommerce",
+                        catalog_headers,
+                        index=suggest_column(catalog_headers, ("Categories", "Categorías")),
+                        key="prep_catalog_category",
+                    )
                     stock_options = ["— No hay columna de stock —"] + headers
                     stock_default = next((header for header in headers if normalize_header(header) == "stock"), None)
                     prep_stock = st.selectbox(
@@ -443,6 +450,21 @@ with st.container(border=True):
                         category_options.setdefault(normalized_category, source_category)
                 categories = sorted(category_options.values(), key=str.casefold)
                 selected_categories = st.multiselect("Categorías habilitadas para este lote", categories, default=[], key="prep_enabled_categories", help="Elegí explícitamente qué categorías incluir.")
+                destination_categories = discover_destination_categories(catalog_rows, prep_catalog_category)
+                category_mappings = {}
+                if selected_categories:
+                    st.markdown("**Asignación a categorías existentes de WooCommerce**")
+                    st.caption("Las opciones se obtienen de categorías observadas en la exportación. La lista puede estar incompleta y no representa necesariamente toda la taxonomía de la tienda.")
+                    mapping_columns = st.columns(min(2, len(selected_categories)))
+                    for index, source_category in enumerate(selected_categories):
+                        with mapping_columns[index % len(mapping_columns)]:
+                            destination = st.selectbox(
+                                source_category,
+                                ["— Seleccionar destino —"] + destination_categories,
+                                key=f"prep_category_map_{normalize_header(source_category)}",
+                            )
+                        if destination != "— Seleccionar destino —":
+                            category_mappings[source_category.strip().casefold()] = destination
                 category_limits = {}
                 if selected_categories:
                     st.markdown("**Límite de productos por categoría**")
@@ -462,7 +484,7 @@ with st.container(border=True):
                     file_hash,
                     catalog_hash,
                     delimiter, catalog_delimiter, prep_sku, prep_name,
-                    prep_price, prep_category, prep_catalog_sku, prep_stock,
+                    prep_price, prep_category, prep_catalog_sku, prep_catalog_category, prep_stock,
                     tuple(sorted(category_limits.items())),
                     minimum_stock if apply_stock_filter else None,
                 )
@@ -471,9 +493,18 @@ with st.container(border=True):
                 if mapping_error:
                     st.error("SKU, nombre, precio y categoría deben usar columnas diferentes. La columna de stock también debe ser distinta.")
 
-                if st.button("Preparar selección de productos", type="primary", use_container_width=True, disabled=not selected_categories or mapping_error, key="run_catalog_preparation"):
+                category_mapping_error = bool(selected_categories) and len(category_mappings) != len(selected_categories)
+                if category_mapping_error:
+                    st.warning("Asigná una categoría de destino para cada categoría de origen seleccionada.")
+                if st.button("Preparar selección de productos", type="primary", use_container_width=True, disabled=not selected_categories or mapping_error or category_mapping_error, key="run_catalog_preparation"):
                     try:
-                        selection_config = {"category_column": prep_category, "price_column": prep_price, "category_limits": category_limits}
+                        selection_config = {
+                            "category_column": prep_category,
+                            "price_column": prep_price,
+                            "category_limits": category_limits,
+                            "category_mappings": category_mappings,
+                            "require_category_mapping": True,
+                        }
                         if prep_stock != "— No hay columna de stock —":
                             selection_config["stock_column"] = prep_stock
                         if apply_stock_filter:
@@ -481,7 +512,7 @@ with st.container(border=True):
                         preparation = prepare_catalog(supplier_rows, catalog_rows, selection_config=selection_config, supplier_columns={"sku": prep_sku, "name": prep_name, "price": prep_price, "catalog_sku": prep_catalog_sku})
                         review_rows = build_preparation_review(preparation, prep_category, prep_price)
                         review_fields = ["CSV row", "SKU", "Category", "Price", "Status", "Reason code", "Reason", "Category position"]
-                        selected_fields = ["SKU", "Name", "Regular price", "Published", "Type"]
+                        selected_fields = ["SKU", "Name", "Regular price", "Categories", "Published", "Type"]
                         st.session_state["catalog_preparation"] = {"result": preparation, "review_rows": review_rows, "review_csv": make_dict_rows_csv(review_rows, review_fields), "selected_csv": make_dict_rows_csv(preparation["export_rows"], selected_fields), "signature": current_preparation_signature}
                     except (OSError, UnicodeError, csv.Error, ValueError, TypeError) as exc:
                         st.error(f"No se pudo preparar el catálogo: {exc}")
@@ -518,7 +549,7 @@ if prep_result and prep_result.get("signature") == current_preparation_signature
     downloads = st.columns(2)
     downloads[0].download_button("Descargar productos seleccionados CSV", data=prep_result["selected_csv"], file_name="catalog_preparation_selected.csv", mime="text/csv", use_container_width=True, disabled=not preparation["export_rows"])
     downloads[1].download_button("Descargar revisión CSV", data=prep_result["review_csv"], file_name="catalog_preparation_review.csv", mime="text/csv", use_container_width=True)
-    st.caption("La exportación actual contiene SKU, nombre, precio, Published y Type. La asignación de categorías y el contrato final de importación se incorporarán en el siguiente bloque.")
+    st.caption("El CSV incluye SKU, nombre, precio, categoría de destino, estado de borrador y tipo de producto. No se modifica WooCommerce hasta que importes el archivo.")
 
 st.divider()
 st.caption("Validador y preparación local · Sin conexión a WooCommerce · Sin escritura sobre los archivos fuente")
