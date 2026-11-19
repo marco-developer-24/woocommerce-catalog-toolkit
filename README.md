@@ -5,7 +5,7 @@
 **Local CSV validation, catalog comparison, and controlled product preparation for WooCommerce.**
 
 <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
-<img src="https://img.shields.io/badge/Interface-Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit interface" />
+<img src="https://img.shields.io/badge/Interface-NiceGUI-2563EB?logo=python&logoColor=white" alt="NiceGUI desktop interface" />
 <img src="https://img.shields.io/badge/Status-Early%20development-64748B" alt="Early development" />
 
 </div>
@@ -42,9 +42,9 @@ Small Python utilities for auditing supplier catalog data and preparing controll
 | Identify SKUs that may be new compared with a store export | New-product preflight | Candidate, review, and full-report CSV files |
 | Compare supplier prices or stock with a store export | Catalog Update Planner | A review report of detected differences |
 | Prepare a limited set of new products by category | Catalog Preparation | Selected product rows and classification/selection details |
-| Review CSV validation in a browser without using the CLI | Streamlit interface | A local upload, preview, validation, and report-download workflow |
+| Inspect a supplier CSV through the desktop interface | NiceGUI interface | Local file upload, structure inspection, and a five-row preview |
 
-These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. SKU preflight is a screening aid, not proof that a product is new. Catalog Preparation combines new-product classification with category-based selection. The workflow is available through both the Python application layer and the local Streamlit interface.
+These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. SKU preflight is a screening aid, not proof that a product is new. Catalog Preparation combines new-product classification with category-based selection. The application services are independent of the graphical interface. The current NiceGUI screen provides supplier-file inspection; the remaining guided workflow is still under development.
 
 ## Recommended catalog-preparation workflow
 
@@ -286,13 +286,13 @@ The workflow returns:
 
 This is a preparation result, not a complete WooCommerce import contract. It does not currently map images, categories, attributes, tax, shipping, variations, or arbitrary supplier fields. It does not connect to WooCommerce, import, update, delete, or publish products. Selected products are explicitly prepared as unpublished simple products (`Published=0`, `Type=simple`).
 
-**Interface availability:** category-based catalog preparation is available in the Streamlit interface. It requires both the supplier CSV and a current WooCommerce catalog export.
+**Interface availability:** category-based catalog preparation is available through the application services. The current NiceGUI screen does not yet expose this workflow.
 
 ## Local graphical interface (first version)
 
-The repository includes an optional Streamlit interface for catalog validation and category-based preparation. Upload a supplier CSV to inspect its structure, map validation columns, run the existing validation rules, and download issue reports. The preparation workflow additionally accepts a current WooCommerce catalog export, maps supplier and catalog SKU columns, lets you enable categories and set per-category limits, and optionally applies a minimum-stock rule.
+The repository includes an optional NiceGUI desktop interface. Its first screen accepts a supplier CSV, inspects its structure, and displays a preview of the first five rows. The remaining guided workflow, including column mapping, store comparison, category selection, and export, is not yet exposed in the new interface.
 
-The interface runs locally and does not connect to WordPress or WooCommerce. Preparation produces a selected-products CSV with SKU, Name, Regular price, Published (0), and Type (simple), plus a review CSV containing selected, not-selected, blocked, review, and existing-product outcomes with reasons and source row numbers. This is a limited preparation output, not a complete WooCommerce import contract. The interface does not import, update, delete, or publish products, and source files remain unchanged.
+The interface runs locally and does not connect to WordPress or WooCommerce. The first screen only reads the selected supplier file and displays an inspection summary and preview. It does not yet prepare or export products, and source files remain unchanged.
 
 ### Run the interface
 
@@ -300,12 +300,12 @@ Python 3.10+ is required.
 
 ```bash
 python -m pip install -r requirements-ui.txt
-python -m streamlit run app.py
+python app.py
 ```
 
-Open the local URL printed by Streamlit in your browser. The first version accepts UTF-8 CSV files (with or without BOM) up to 50 MB.
+The application opens a desktop window through NiceGUI's native webview mode. The first version accepts UTF-8 CSV files (with or without BOM) up to 50 MB.
 
-The Streamlit dependency is kept separate from the core toolkit. CLI users and automated tests do not need to install it.
+The NiceGUI and desktop-webview dependencies are kept separate from the core toolkit. CLI users and automated tests do not need to install them.
 
 ## Requirements
 
@@ -323,7 +323,7 @@ Tests should not need live external websites; image URL tests use mocked HTTP re
 
 ## Project status
 
-Early development. The toolkit contains local CSV validation, comparison, and category-based preparation logic. The Streamlit interface exposes validation and a first category-based preparation workflow. The workflow still needs usability testing with representative supplier and WooCommerce catalog exports.
+Early development. The toolkit contains local CSV validation, comparison, and category-based preparation logic. The NiceGUI interface currently exposes only supplier CSV inspection and preview. Store comparison, category selection, product selection, export, and usability testing remain pending.
 
 ## License
 
