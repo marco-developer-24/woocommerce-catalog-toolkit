@@ -54,6 +54,7 @@ class CatalogPreparationTests(unittest.TestCase):
             "category_column": "Category",
             "price_column": "Regular price",
             "category_limits": {"Accessories": 3},
+            "stock_column": "Stock",
         }
 
         self.supplier_columns = {
@@ -222,6 +223,7 @@ class CatalogPreparationTests(unittest.TestCase):
                 "Name": "Invalid selection price",
                 "Regular price": "10",
                 "Selection price": "not-a-number",
+                "Stock": "5",
                 "Category": "Accessories",
             }
         ]
@@ -250,6 +252,7 @@ class CatalogPreparationTests(unittest.TestCase):
                 "Name": "Bad price",
                 "Regular price": "12,50",
                 "Category": "Accessories",
+                "Stock": "5",
             }
         ]
 
@@ -389,9 +392,11 @@ class CatalogPreparationValidationTests(unittest.TestCase):
 
         result = self._prepare(selection_config=selection_config)
 
-        self.assertEqual(
-            [row["SKU"] for row in result["export_rows"]],
-            ["NEW-1"],
+        self.assertEqual(result["export_rows"], [])
+        self.assertEqual(len(result["add_products"]["REVIEW"]), 1)
+        self.assertIn(
+            "No supplier stock column",
+            result["add_products"]["REVIEW"][0]["reason"],
         )
 
     def test_rejects_non_dictionary_category_limits(self):
