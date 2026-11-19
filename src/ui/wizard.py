@@ -1,20 +1,15 @@
 """Guided Streamlit workflow for preparing WooCommerce catalog imports."""
 
-import csv
-import hashlib
-
 import streamlit as st
 
-from src.application.catalog_input import (
-    detect_delimiter,
-    get_cached_csv_data,
-)
 from src.application.provider_profile import (
     detect_provider_profile,
     provider_mapping_fingerprint,
-    stock_review_policy,
-    suggest_provider_columns,
     validate_provider_mapping,
+)
+from src.application.provider_setup import (
+    confirm_provider_setup,
+    inspect_provider_file,
 )
 
 
@@ -95,54 +90,51 @@ def _render_provider_step():
         return
 
     file_bytes = uploaded.getvalue()
-    if len(file_bytes) > MAX_UPLOAD_BYTES:
-        st.error("El archivo supera el límite de 50 MB.")
-        return
-
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
-    profile_default = detect_provider_profile(uploaded.name)
-    st.session_state.setdefault("wizard_supplier_cache", {})
     try:
-        sample = file_bytes[:8192].decode("utf-8-sig")
-        detected_delimiter = detect_delimiter(sample)
-    except UnicodeDecodeError:
-        st.error("No se pudo leer el archivo como UTF-8. Exportalo como CSV UTF-8.")
+        initial_inspection = inspect_provider_file(file_bytes, uploaded.name)
+    except (UnicodeDecodeError, ValueError, TypeError) as exc:
+        st.error(f"No se pudo interpretar el CSV: {exc}")
         return
 
+    profile_default = initial_inspection["profile"]
     top_left, top_right = st.columns([1, 1])
     with top_left:
         profile = st.selectbox(
             "Perfil del proveedor",
             options=("NB", "Genérico"),
             index=("NB", "Genérico").index(profile_default),
-            key=f"wizard_profile_{file_hash[:12]}",
+            key=f"wizard_profile_{initial_inspection['file_hash'][:12]}",
             help="El prefijo NB- sugiere el perfil NB. Podés corregirlo si el archivo pertenece a otro proveedor.",
         )
     with top_right:
         labels = list(DELIMITER_OPTIONS)
         detected_label = next(
-            (label for label, value in DELIMITER_OPTIONS.items() if value == detected_delimiter),
+            (label for label, value in DELIMITER_OPTIONS.items()
+             if value == initial_inspection["detected_delimiter"]),
             labels[0],
         )
         delimiter_label = st.selectbox(
             "Separador del archivo",
             options=labels,
             index=labels.index(detected_label),
-            key=f"wizard_delimiter_{file_hash[:12]}",
+            key=f"wizard_delimiter_{initial_inspection['file_hash'][:12]}",
         )
     delimiter = DELIMITER_OPTIONS[delimiter_label]
 
     try:
-        headers, rows, ignored_empty_columns = get_cached_csv_data(
-            st.session_state["wizard_supplier_cache"],
-            file_hash,
+        inspection = inspect_provider_file(
             file_bytes,
-            delimiter,
+            uploaded.name,
+            delimiter=delimiter,
+            profile=profile,
         )
-    except (UnicodeDecodeError, csv.Error, ValueError, TypeError) as exc:
+    except (UnicodeDecodeError, ValueError, TypeError) as exc:
         st.error(f"No se pudo interpretar el CSV: {exc}")
         return
 
+    headers = inspection["headers"]
+    rows = inspection["rows"]
+    ignored_empty_columns = inspection["ignored_empty_columns"]
     st.caption(
         f"**{uploaded.name}** · {len(rows):,} filas · {len(headers)} columnas útiles"
     )
@@ -166,7 +158,7 @@ def _render_provider_step():
         "Las sugerencias se basan en los encabezados. Revisalas antes de confirmar; "
         "el sistema no completa campos obligatorios con la primera columna disponible."
     )
-    suggestions = suggest_provider_columns(headers, profile)
+    suggestions = inspection["suggestions"]
     fields = (
         ("sku", "SKU", True),
         ("name", "Nombre del producto", True),
@@ -186,7 +178,7 @@ def _render_provider_step():
                 label + (" *" if required else ""),
                 options=options,
                 index=default_index,
-                key=f"wizard_{field}_{profile}_{file_hash[:12]}",
+                key=f"wizard_{field}_{profile}_{inspection['file_hash'][:12]}",
             )
             mapping[field] = None if selected == placeholder else selected
             if suggested:
@@ -211,7 +203,9 @@ def _render_provider_step():
             "quedarán en revisión y no serán seleccionables ni exportables."
         )
 
-    fingerprint = provider_mapping_fingerprint(file_hash, delimiter, profile, mapping)
+    fingerprint = provider_mapping_fingerprint(
+        inspection["file_hash"], delimiter, profile, mapping
+    )
     confirmed = st.session_state.get("wizard_provider_confirmation") == fingerprint
     action_col, status_col = st.columns([1, 2])
     with action_col:
@@ -221,18 +215,15 @@ def _render_provider_step():
             use_container_width=True,
             disabled=not valid,
         ):
-            st.session_state["wizard_provider_confirmation"] = fingerprint
-            st.session_state["wizard_provider_data"] = {
-                "filename": uploaded.name,
-                "file_hash": file_hash,
-                "file_bytes": file_bytes,
-                "delimiter": delimiter,
-                "profile": profile,
-                "headers": headers,
-                "rows": rows,
-                "mapping": mapping,
-                "stock_policy": stock_review_policy(mapping),
-            }
+            try:
+                confirmed_data = confirm_provider_setup(inspection, mapping)
+            except (ValueError, TypeError) as exc:
+                st.error(f"No se pudo confirmar la configuración: {exc}")
+                return
+            st.session_state["wizard_provider_confirmation"] = confirmed_data[
+                "mapping_fingerprint"
+            ]
+            st.session_state["wizard_provider_data"] = confirmed_data
             st.rerun()
     with status_col:
         if confirmed:
@@ -244,7 +235,6 @@ def _render_provider_step():
         if st.button("Continuar a Tienda →", use_container_width=True):
             st.session_state["wizard_step"] = 2
             st.rerun()
-
 
 def _render_store_placeholder():
     provider = st.session_state.get("wizard_provider_data", {})
