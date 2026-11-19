@@ -41,3 +41,9 @@ def discover_destination_categories(catalog_rows, category_column):
             if normalized:
                 categories.setdefault(normalized, path)
     return sorted(categories.values(), key=str.casefold)
+
+
+def escape_category_path(value):
+    """Escape literal commas for WooCommerce's comma-separated Categories field."""
+    text = "" if value is None else str(value).strip()
+    return text.replace("\\\\", "\\\\\\\\").replace(",", "\\\\,")
