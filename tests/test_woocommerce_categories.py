@@ -2,6 +2,7 @@ import unittest
 
 from src.application.woocommerce_categories import (
     discover_destination_categories,
+    escape_category_path,
     split_category_cell,
 )
 
@@ -17,6 +18,12 @@ class WooCommerceCategoryParsingTests(unittest.TestCase):
         self.assertEqual(
             split_category_cell(r"Audio\\, Video > Cables, Hogar"),
             ["Audio, Video > Cables", "Hogar"],
+        )
+
+    def test_escapes_commas_in_destination_category_names(self):
+        self.assertEqual(
+            escape_category_path("Audio, Video > Cables"),
+            r"Audio\\, Video > Cables",
         )
 
     def test_ignores_blank_values(self):
