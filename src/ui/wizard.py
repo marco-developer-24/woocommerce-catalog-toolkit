@@ -283,9 +283,7 @@ def render_wizard():
         unsafe_allow_html=True,
     )
 
-    provider = st.session_state.get("wizard_provider_data")
-    current_confirmation = st.session_state.get("wizard_provider_confirmation")
-    provider_confirmed = bool(provider and current_confirmation)
+    provider_confirmed = _provider_is_confirmed()
     active_step = st.session_state.setdefault("wizard_step", 1)
     if active_step > 1 and not provider_confirmed:
         st.session_state["wizard_step"] = 1
