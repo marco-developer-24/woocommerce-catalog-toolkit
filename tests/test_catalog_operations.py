@@ -18,7 +18,7 @@ class AddProductsOperationTests(unittest.TestCase):
         self.assertEqual([x["status"] for x in result[READY]], [READY])
         self.assertEqual(result[READY][0]["changes"], {
             "SKU": "NEW-1", "Name": "New item", "Regular price": "125.5",
-            "Published": "0", "Type": "simple",
+            "Published": "-1", "Type": "simple",
         })
         self.assertEqual(len(result[EXCLUDED]), 1)
         self.assertEqual(len(result[BLOCKED]), 2)
