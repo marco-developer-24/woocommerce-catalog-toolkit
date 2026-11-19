@@ -420,13 +420,20 @@ with st.container(border=True):
                 left, right = st.columns(2)
                 with left:
                     prep_sku = st.selectbox("SKU del proveedor", headers, index=headers.index(current_mapping["sku"]), key="prep_sku")
-                    prep_name = st.selectbox("Nombre del producto", headers, index=headers.index(current_mapping["name"]), key="prep_name")
+                    prep_name = st.selectbox("Nombre del producto", headers, index=suggest_column(headers, ("DETALLE", "NOMBRE", "NAME", "PRODUCT_NAME")), key="prep_name")
                     prep_category = st.selectbox("Categoría del proveedor", headers, index=suggest_column(headers, ("CATEGORIA", "CATEGORY", "PRODUCT_CATEGORY")), key="prep_category")
                 with right:
-                    prep_price = st.selectbox("Precio para selección", headers, index=headers.index(current_mapping["price"]), key="prep_price")
+                    prep_price = st.selectbox("Precio para selección y exportación", headers, index=suggest_column(headers, ("PRECIO PESOS CON IVA",)), key="prep_price")
                     prep_catalog_sku = st.selectbox("SKU en WooCommerce", catalog_headers, index=suggest_column(catalog_headers, ("SKU", "Product SKU")), key="prep_catalog_sku")
-                    stock_options = ["— Sin filtro de stock —"] + headers
-                    prep_stock = st.selectbox("Stock del proveedor (opcional)", stock_options, key="prep_stock")
+                    stock_options = ["— No hay columna de stock —"] + headers
+                    stock_default = next((header for header in headers if normalize_header(header) == "stock"), None)
+                    prep_stock = st.selectbox(
+                        "Stock del proveedor (obligatorio para exportar)",
+                        stock_options,
+                        index=stock_options.index(stock_default) if stock_default else 0,
+                        key="prep_stock",
+                        help="Si no existe una columna de stock, todos los productos nuevos pasan a revisión."
+                    )
 
                 categories = sorted({str(row.get(prep_category, "")).strip() for row in supplier_rows if str(row.get(prep_category, "")).strip()}, key=str.casefold)
                 selected_categories = st.multiselect("Categorías habilitadas para este lote", categories, default=[], key="prep_enabled_categories", help="Elegí explícitamente qué categorías incluir.")
@@ -440,7 +447,7 @@ with st.container(border=True):
 
                 apply_stock_filter = False
                 minimum_stock = None
-                if prep_stock != "— Sin filtro de stock —":
+                if prep_stock != "— No hay columna de stock —":
                     apply_stock_filter = st.checkbox("Aplicar stock mínimo", value=False, key="prep_apply_stock_minimum")
                     if apply_stock_filter:
                         minimum_stock = st.number_input("Stock mínimo", min_value=0, value=1, step=1, key="prep_minimum_stock")
@@ -494,7 +501,7 @@ if prep_result and prep_result.get("signature") == current_preparation_signature
     detail_metrics[1].metric("En revisión", summary["review"])
     detail_metrics[2].metric("Aptos fuera del límite", summary["ready_not_selected"])
     if preparation["export_rows"]:
-        st.success(f"Se prepararon {summary['exported']} producto(s). La salida mantiene Published=0 y Type=simple.")
+        st.success(f"Se prepararon {summary['exported']} producto(s) como borradores (Published=-1, Type=simple).")
     else:
         st.warning("No hay productos seleccionados con la configuración actual.")
     st.markdown("**Detalle de selección**")
@@ -505,7 +512,7 @@ if prep_result and prep_result.get("signature") == current_preparation_signature
     downloads = st.columns(2)
     downloads[0].download_button("Descargar productos seleccionados CSV", data=prep_result["selected_csv"], file_name="catalog_preparation_selected.csv", mime="text/csv", use_container_width=True, disabled=not preparation["export_rows"])
     downloads[1].download_button("Descargar revisión CSV", data=prep_result["review_csv"], file_name="catalog_preparation_review.csv", mime="text/csv", use_container_width=True)
-    st.caption("La exportación contiene SKU, nombre, precio, Published y Type. No es todavía un archivo universal de importación WooCommerce.")
+    st.caption("La exportación actual contiene SKU, nombre, precio, Published y Type. La asignación de categorías y el contrato final de importación se incorporarán en el siguiente bloque.")
 
 st.divider()
 st.caption("Validador y preparación local · Sin conexión a WooCommerce · Sin escritura sobre los archivos fuente")
