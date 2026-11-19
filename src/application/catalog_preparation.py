@@ -106,6 +106,8 @@ def prepare_catalog(
         catalog_sku_column=catalog_sku_column,
         name_column=supplier_columns["name"],
         price_column=supplier_columns["price"],
+        stock_column=selection_config.get("stock_column"),
+        require_positive_stock=True,
     )
     ready_items = addition[READY]
 
