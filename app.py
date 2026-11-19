@@ -468,7 +468,7 @@ with st.container(border=True):
                 if st.button("Preparar selección de productos", type="primary", use_container_width=True, disabled=not selected_categories or mapping_error, key="run_catalog_preparation"):
                     try:
                         selection_config = {"category_column": prep_category, "price_column": prep_price, "category_limits": category_limits}
-                        if prep_stock != "— Sin filtro de stock —":
+                        if prep_stock != "— No hay columna de stock —":
                             selection_config["stock_column"] = prep_stock
                         if apply_stock_filter:
                             selection_config["minimum_stock"] = minimum_stock
