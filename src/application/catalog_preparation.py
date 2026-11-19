@@ -1,3 +1,4 @@
+from src.application.woocommerce_categories import escape_category_path
 """Application workflow for selecting and preparing new products.
 
 New-product classification runs before commercial selection so that existing
@@ -152,7 +153,7 @@ def prepare_catalog(
 
         row = dict(ready_item["changes"])
         if destination:
-            row["Categories"] = destination
+            row["Categories"] = escape_category_path(destination)
         export_items.append(ready_item)
         export_rows.append(row)
 
