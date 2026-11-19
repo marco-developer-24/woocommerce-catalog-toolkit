@@ -273,6 +273,20 @@ def _render_store_placeholder():
         st.rerun()
 
 
+def _provider_is_confirmed():
+    provider = st.session_state.get("wizard_provider_data")
+    confirmation = st.session_state.get("wizard_provider_confirmation")
+    if not provider:
+        return False
+    expected = provider_mapping_fingerprint(
+        provider["file_hash"],
+        provider["delimiter"],
+        provider["profile"],
+        provider["mapping"],
+    )
+    return confirmation == expected
+
+
 def render_wizard():
     """Render the guided five-stage application shell and the active stage."""
     _render_styles()
