@@ -16,14 +16,14 @@ class WooCommerceCategoryParsingTests(unittest.TestCase):
 
     def test_preserves_escaped_commas_inside_category_names(self):
         self.assertEqual(
-            split_category_cell(r"Audio\\, Video > Cables, Hogar"),
+            split_category_cell(r"Audio\, Video > Cables, Hogar"),
             ["Audio, Video > Cables", "Hogar"],
         )
 
     def test_escapes_commas_in_destination_category_names(self):
         self.assertEqual(
             escape_category_path("Audio, Video > Cables"),
-            r"Audio\\, Video > Cables",
+            r"Audio\, Video > Cables",
         )
 
     def test_ignores_blank_values(self):
