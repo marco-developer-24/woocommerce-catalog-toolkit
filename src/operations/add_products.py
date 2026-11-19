@@ -56,7 +56,7 @@ def prepare_add_products(
                 "SKU": str(row.get(supplier_sku_column, "")).strip(),
                 "Name": name,
                 "Regular price": decimal_to_text(price),
-                "Published": "0",
+                "Published": "-1",
                 "Type": "simple",
             },
             sku_column=supplier_sku_column,
