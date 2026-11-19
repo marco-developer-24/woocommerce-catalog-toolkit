@@ -264,6 +264,34 @@ class CatalogPreparationTests(unittest.TestCase):
             ["BAD-PRICE"],
         )
 
+    def test_confirmed_category_mapping_is_included_in_export(self):
+        selection_config = {
+            **self.selection_config,
+            "category_mappings": {"accessories": "Hardware > Accessories"},
+            "require_category_mapping": True,
+        }
+        result = self._prepare(selection_config=selection_config)
+
+        self.assertEqual(
+            [row["Categories"] for row in result["export_rows"]],
+            ["Hardware > Accessories", "Hardware > Accessories"],
+        )
+
+    def test_selected_products_without_category_mapping_are_not_exported(self):
+        selection_config = {
+            **self.selection_config,
+            "category_mappings": {},
+            "require_category_mapping": True,
+        }
+        result = self._prepare(selection_config=selection_config)
+
+        self.assertEqual(result["export_rows"], [])
+        self.assertEqual(result["summary"]["unmapped_category"], 2)
+        self.assertEqual(
+            [item["reason_code"] for item in result["selection"]["items"]],
+            ["CATEGORY_NOT_MAPPED", "CATEGORY_NOT_MAPPED"],
+        )
+
     def test_export_rows_match_export_items_changes(self):
         result = self._prepare()
 
