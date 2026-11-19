@@ -15,9 +15,7 @@ class ProviderSetupServiceTests(unittest.TestCase):
         ).encode("utf-8")
 
     def test_inspection_reads_rows_and_suggests_nb_mapping(self):
-        result = inspect_provider_file(
-            self.csv_bytes, "NB-lista.csv"
-        )
+        result = inspect_provider_file(self.csv_bytes, "NB-lista.csv")
         self.assertEqual(result["delimiter"], ";")
         self.assertEqual(result["profile"], "NB")
         self.assertEqual(len(result["rows"]), 2)
@@ -50,9 +48,7 @@ class ProviderSetupServiceTests(unittest.TestCase):
             )
 
     def test_confirmation_returns_validated_mapping_and_stock_policy(self):
-        inspection = inspect_provider_file(
-            self.csv_bytes, "NB-lista.csv"
-        )
+        inspection = inspect_provider_file(self.csv_bytes, "NB-lista.csv")
         confirmed = confirm_provider_setup(
             inspection,
             {
@@ -65,12 +61,24 @@ class ProviderSetupServiceTests(unittest.TestCase):
         )
         self.assertEqual(confirmed["mapping"]["price"], "PRECIO PESOS CON IVA")
         self.assertEqual(confirmed["stock_policy"], "validate_column")
-        self.assertEqual(len(confirmed["mapping_fingerprint"]), 64)
+        self.assertEqual(
+            confirmed["mapping_fingerprint"],
+            (
+                inspection["file_hash"],
+                inspection["delimiter"],
+                inspection["profile"],
+                (
+                    ("sku", "CODIGO"),
+                    ("name", "DETALLE"),
+                    ("category", "CATEGORIA"),
+                    ("price", "PRECIO PESOS CON IVA"),
+                    ("stock", "STOCK"),
+                ),
+            ),
+        )
 
     def test_confirmation_requires_stock_review_when_column_is_absent(self):
-        inspection = inspect_provider_file(
-            self.csv_bytes, "NB-lista.csv"
-        )
+        inspection = inspect_provider_file(self.csv_bytes, "NB-lista.csv")
         confirmed = confirm_provider_setup(
             inspection,
             {
@@ -84,9 +92,7 @@ class ProviderSetupServiceTests(unittest.TestCase):
         self.assertEqual(confirmed["stock_policy"], "review_all")
 
     def test_confirmation_rejects_invalid_mapping(self):
-        inspection = inspect_provider_file(
-            self.csv_bytes, "NB-lista.csv"
-        )
+        inspection = inspect_provider_file(self.csv_bytes, "NB-lista.csv")
         with self.assertRaises(ValueError):
             confirm_provider_setup(
                 inspection,
