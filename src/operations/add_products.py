@@ -18,6 +18,8 @@ def prepare_add_products(
     catalog_sku_column="SKU",
     name_column="Name",
     price_column="Regular price",
+    stock_column=None,
+    require_positive_stock=False,
 ):
     """Classify rows for a new-products run; never changes existing products.
 
@@ -48,6 +50,20 @@ def prepare_add_products(
         if problems:
             items.append(operation_item(match, BLOCKED, " ".join(problems), sku_column=supplier_sku_column))
             continue
+        if require_positive_stock:
+            stock = parse_non_negative_decimal(
+                row.get(stock_column, "") if stock_column else ""
+            )
+            if stock is None or stock <= 0:
+                reason = (
+                    f"Missing, invalid, or non-positive stock in {stock_column!r}."
+                    if stock_column
+                    else "No supplier stock column is configured; manual review is required."
+                )
+                items.append(
+                    operation_item(match, REVIEW, reason, sku_column=supplier_sku_column)
+                )
+                continue
         items.append(operation_item(
             match,
             READY,
