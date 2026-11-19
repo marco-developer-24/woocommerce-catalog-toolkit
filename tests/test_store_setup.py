@@ -58,12 +58,12 @@ class StoreSetupServiceTests(unittest.TestCase):
 
     def test_confirmation_rejects_column_not_in_export(self):
         inspection = inspect_store_file(b"SKU,Name\nA-1,Product\n", "store.csv")
-        with self.assertRaisesRegex(ValueError, "does not exist"):
+        with self.assertRaisesRegex(ValueError, "no existe"):
             confirm_store_setup(self.provider, inspection, {"sku": "Code"})
 
     def test_confirmation_rejects_same_sku_and_category_column(self):
         inspection = inspect_store_file(b"SKU,Name\nA-1,Product\n", "store.csv")
-        with self.assertRaisesRegex(ValueError, "different"):
+        with self.assertRaisesRegex(ValueError, "diferentes"):
             confirm_store_setup(
                 self.provider, inspection, {"sku": "SKU", "categories": "SKU"}
             )
@@ -72,7 +72,7 @@ class StoreSetupServiceTests(unittest.TestCase):
         content = (
             "SKU,Name,Categories\n"
             "OLD-1,Existing,Hardware > RAM\n"
-            "OLD-1,Duplicate,Hardware > Disks\n"
+            "STORE-2,Other,Hardware > Disks\n"
         ).encode()
         inspection = inspect_store_file(content, "store.csv")
         result = confirm_store_setup(
