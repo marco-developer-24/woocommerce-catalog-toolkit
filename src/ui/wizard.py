@@ -9,7 +9,7 @@ from src.application.catalog_input import (
     detect_delimiter,
     get_cached_csv_data,
 )
-from src.ui.wizard_helpers import (
+from src.application.provider_profile import (
     detect_provider_profile,
     provider_mapping_fingerprint,
     stock_review_policy,
