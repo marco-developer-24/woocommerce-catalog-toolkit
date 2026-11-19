@@ -12,7 +12,7 @@ def split_category_cell(value):
         if escaped:
             current.append(character)
             escaped = False
-        elif character == "\\\\":
+        elif character == "\\":
             escaped = True
         elif character == ",":
             item = "".join(current).strip()
@@ -23,7 +23,7 @@ def split_category_cell(value):
             current.append(character)
 
     if escaped:
-        current.append("\\\\")
+        current.append("\\")
 
     item = "".join(current).strip()
     if item:
@@ -46,4 +46,4 @@ def discover_destination_categories(catalog_rows, category_column):
 def escape_category_path(value):
     """Escape literal commas for WooCommerce's comma-separated Categories field."""
     text = "" if value is None else str(value).strip()
-    return text.replace("\\\\", "\\\\\\\\").replace(",", "\\\\,")
+    return text.replace("\\", "\\\\").replace(",", "\\,")
