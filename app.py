@@ -435,7 +435,13 @@ with st.container(border=True):
                         help="Si no existe una columna de stock, todos los productos nuevos pasan a revisión."
                     )
 
-                categories = sorted({str(row.get(prep_category, "")).strip() for row in supplier_rows if str(row.get(prep_category, "")).strip()}, key=str.casefold)
+                category_options = {}
+                for row in supplier_rows:
+                    source_category = str(row.get(prep_category, "") or "").strip()
+                    normalized_category = source_category.casefold()
+                    if normalized_category:
+                        category_options.setdefault(normalized_category, source_category)
+                categories = sorted(category_options.values(), key=str.casefold)
                 selected_categories = st.multiselect("Categorías habilitadas para este lote", categories, default=[], key="prep_enabled_categories", help="Elegí explícitamente qué categorías incluir.")
                 category_limits = {}
                 if selected_categories:
