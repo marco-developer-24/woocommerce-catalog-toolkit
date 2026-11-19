@@ -2,9 +2,15 @@
 
 import csv
 import hashlib
-import unicodedata
 
 import streamlit as st
+
+from src.ui_helpers import (
+    build_preparation_signature,
+    category_widget_key,
+    normalize_header,
+    suggest_column,
+)
 
 from src.application.catalog_validation import run_catalog_validation
 from src.application.catalog_exports import (
@@ -28,22 +34,6 @@ DELIMITER_OPTIONS = {
     "Barra vertical (|)": "|",
 }
 
-
-
-def normalize_header(value):
-    """Normalize supplier headers for tolerant, accent-insensitive matching."""
-    normalized = unicodedata.normalize("NFKD", value)
-    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
-    return "".join(char.casefold() for char in normalized if char.isalnum())
-
-
-def suggest_column(headers, aliases):
-    """Suggest a header using normalized exact matches, without guessing loosely."""
-    normalized_aliases = {normalize_header(alias) for alias in aliases}
-    for header in headers:
-        if normalize_header(header) in normalized_aliases:
-            return headers.index(header)
-    return 0
 
 
 st.set_page_config(page_title="Catalog CSV Validator", page_icon="🧰", layout="wide")
@@ -203,10 +193,19 @@ with st.container(border=True):
     st.caption("Confirmá qué columna representa cada dato. El stock es opcional.")
     col1, col2 = st.columns(2)
     with col1:
-        sku_column = st.selectbox("SKU", headers, index=default_column("sku"), key="sku_column")
-        name_column = st.selectbox("Nombre del producto", headers, index=default_column("name"), key="name_column")
+        sku_column = st.selectbox(
+            "SKU", headers, index=default_column("sku"),
+            placeholder="Seleccioná la columna SKU", key="sku_column"
+        )
+        name_column = st.selectbox(
+            "Nombre del producto", headers, index=default_column("name"),
+            placeholder="Seleccioná la columna de nombre", key="name_column"
+        )
     with col2:
-        price_column = st.selectbox("Precio", headers, index=default_column("price"), key="price_column")
+        price_column = st.selectbox(
+            "Precio", headers, index=default_column("price"),
+            placeholder="Seleccioná la columna de precio", key="price_column"
+        )
         stock_options = ["— No validar stock —"] + headers
         stock_default = next(
             (header for candidate in aliases["stock"] for header in headers if header.casefold() == candidate.casefold()),
@@ -226,7 +225,9 @@ with st.container(border=True):
     }
     required_columns = [current_mapping["sku"], current_mapping["name"], current_mapping["price"]]
     mapping_error = None
-    if len(set(required_columns)) != len(required_columns):
+    if any(column is None for column in required_columns):
+        mapping_error = "Asigná una columna para SKU, nombre y precio antes de analizar."
+    elif len(set(required_columns)) != len(required_columns):
         mapping_error = "SKU, nombre y precio deben estar asignados a columnas diferentes."
     elif current_mapping["stock"] in required_columns:
         mapping_error = "La columna de stock debe ser distinta de SKU, nombre y precio."
@@ -420,16 +421,37 @@ with st.container(border=True):
                 st.markdown("**Mapeo para preparar productos nuevos**")
                 left, right = st.columns(2)
                 with left:
-                    prep_sku = st.selectbox("SKU del proveedor", headers, index=headers.index(current_mapping["sku"]), key="prep_sku")
-                    prep_name = st.selectbox("Nombre del producto", headers, index=suggest_column(headers, ("DETALLE", "NOMBRE", "NAME", "PRODUCT_NAME")), key="prep_name")
-                    prep_category = st.selectbox("Categoría del proveedor", headers, index=suggest_column(headers, ("CATEGORIA", "CATEGORY", "PRODUCT_CATEGORY")), key="prep_category")
+                    prep_sku = st.selectbox(
+                        "SKU del proveedor", headers,
+                        index=headers.index(current_mapping["sku"]) if current_mapping["sku"] in headers else None,
+                        placeholder="Seleccioná el SKU del proveedor", key="prep_sku"
+                    )
+                    prep_name = st.selectbox(
+                        "Nombre del producto", headers,
+                        index=suggest_column(headers, ("DETALLE", "NOMBRE", "NAME", "PRODUCT_NAME")),
+                        placeholder="Seleccioná el nombre del producto", key="prep_name"
+                    )
+                    prep_category = st.selectbox(
+                        "Categoría del proveedor", headers,
+                        index=suggest_column(headers, ("CATEGORIA", "CATEGORY", "PRODUCT_CATEGORY")),
+                        placeholder="Seleccioná la categoría del proveedor", key="prep_category"
+                    )
                 with right:
-                    prep_price = st.selectbox("Precio para selección y exportación", headers, index=suggest_column(headers, ("PRECIO PESOS CON IVA",)), key="prep_price")
-                    prep_catalog_sku = st.selectbox("SKU en WooCommerce", catalog_headers, index=suggest_column(catalog_headers, ("SKU", "Product SKU")), key="prep_catalog_sku")
+                    prep_price = st.selectbox(
+                        "Precio para selección y exportación", headers,
+                        index=suggest_column(headers, ("PRECIO PESOS CON IVA",)),
+                        placeholder="Seleccioná el precio del proveedor", key="prep_price"
+                    )
+                    prep_catalog_sku = st.selectbox(
+                        "SKU en WooCommerce", catalog_headers,
+                        index=suggest_column(catalog_headers, ("SKU", "Product SKU")),
+                        placeholder="Seleccioná el SKU de WooCommerce", key="prep_catalog_sku"
+                    )
                     prep_catalog_category = st.selectbox(
                         "Categorías de WooCommerce",
                         catalog_headers,
                         index=suggest_column(catalog_headers, ("Categories", "Categorías")),
+                        placeholder="Seleccioná la columna de categorías",
                         key="prep_catalog_category",
                     )
                     stock_options = ["— No hay columna de stock —"] + headers
@@ -461,7 +483,7 @@ with st.container(border=True):
                             destination = st.selectbox(
                                 source_category,
                                 ["— Seleccionar destino —"] + destination_categories,
-                                key=f"prep_category_map_{normalize_header(source_category)}",
+                                key=category_widget_key(source_category),
                             )
                         if destination != "— Seleccionar destino —":
                             category_mappings[source_category.strip().casefold()] = destination
@@ -480,18 +502,31 @@ with st.container(border=True):
                     if apply_stock_filter:
                         minimum_stock = st.number_input("Stock mínimo", min_value=0, value=1, step=1, key="prep_minimum_stock")
 
-                current_preparation_signature = (
-                    file_hash,
-                    catalog_hash,
-                    delimiter, catalog_delimiter, prep_sku, prep_name,
-                    prep_price, prep_category, prep_catalog_sku, prep_catalog_category, prep_stock,
-                    tuple(sorted(category_limits.items())),
-                    minimum_stock if apply_stock_filter else None,
+                required_mapping = [prep_sku, prep_name, prep_price, prep_category, prep_catalog_sku, prep_catalog_category]
+                mapping_error = (
+                    any(column is None for column in required_mapping)
+                    or len(set(required_mapping)) != len(required_mapping)
+                    or prep_stock in required_mapping
                 )
-                required_mapping = [prep_sku, prep_name, prep_price, prep_category]
-                mapping_error = len(set(required_mapping)) != len(required_mapping) or prep_stock in required_mapping
+                current_preparation_signature = build_preparation_signature(
+                    file_hash=file_hash,
+                    catalog_hash=catalog_hash,
+                    delimiter=delimiter,
+                    catalog_delimiter=catalog_delimiter,
+                    columns=(
+                        prep_sku, prep_name, prep_price, prep_category,
+                        prep_catalog_sku, prep_catalog_category, prep_stock,
+                    ),
+                    selected_categories=selected_categories,
+                    category_mappings=category_mappings,
+                    category_limits=category_limits,
+                    minimum_stock=minimum_stock if apply_stock_filter else None,
+                )
                 if mapping_error:
-                    st.error("SKU, nombre, precio y categoría deben usar columnas diferentes. La columna de stock también debe ser distinta.")
+                    st.error(
+                        "Completá el mapeo de SKU, nombre, precio y categorías. "
+                        "Cada campo debe usar una columna diferente; el stock también debe ser distinto."
+                    )
 
                 category_mapping_error = bool(selected_categories) and len(category_mappings) != len(selected_categories)
                 if category_mapping_error:
