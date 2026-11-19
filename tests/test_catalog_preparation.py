@@ -270,7 +270,7 @@ class CatalogPreparationTests(unittest.TestCase):
                 self.assertEqual(row, item["changes"])
                 self.assertIsNot(row, item["changes"])
                 self.assertEqual(row["SKU"], item["sku"])
-                self.assertEqual(row["Published"], "0")
+                self.assertEqual(row["Published"], "-1")
                 self.assertEqual(row["Type"], "simple")
 
     def test_selection_preserves_original_supplier_row_numbers(self):
