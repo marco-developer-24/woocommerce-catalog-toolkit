@@ -91,8 +91,16 @@ def build_ui():
             provider_status = ui.label("Esperando un archivo CSV…").classes(
                 "text-sm text-slate-600"
             )
+            with ui.column().classes("w-full gap-2"):
+                provider_upload = ui.upload(
+                    label="Seleccionar CSV del proveedor",
+                    auto_upload=True,
+                    max_file_size=MAX_UPLOAD_BYTES,
+                    max_files=1,
+                ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
             provider_details = ui.column().classes("w-full gap-3")
             provider_preview = ui.column().classes("w-full gap-2")
+
             ui.separator()
             ui.label("2. Mapeo de columnas del proveedor").classes(
                 "text-lg font-semibold text-slate-900"
@@ -102,14 +110,6 @@ def build_ui():
             ).classes("text-sm text-slate-500")
             provider_mapping_area = ui.column().classes("w-full gap-3")
             provider_confirmation = ui.column().classes("w-full gap-2")
-
-            with ui.column().classes("w-full gap-2"):
-                provider_upload = ui.upload(
-                    label="Seleccionar CSV del proveedor",
-                    auto_upload=True,
-                    max_file_size=MAX_UPLOAD_BYTES,
-                    max_files=1,
-                ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
 
             def clear_store(*, reset_upload=True):
                 if reset_upload:
