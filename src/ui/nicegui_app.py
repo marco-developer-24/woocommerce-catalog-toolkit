@@ -12,6 +12,7 @@ from src.application.store_setup import (
 )
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_exports import make_dict_rows_csv
+from src.application.manual_product_selection import set_manual_product_selection
 from src.operations.add_products import prepare_add_products
 from src.operations.select_products import normalize_category
 from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
@@ -38,6 +39,8 @@ def build_ui():
         "store_mode": "not_decided",
         "preparation": None,
         "selection_result": None,
+        "selection_category_mappings": {},
+        "selection_category_limits": {},
     }
     provider_selectors = {}
     store_selectors = {}
@@ -779,6 +782,19 @@ def build_ui():
                 return
 
             state["selection_result"] = result
+            state["selection_category_mappings"] = category_mappings
+            state["selection_category_limits"] = category_limits
+            render_selection_result()
+            ui.notify("Selección por categoría aplicada", type="positive")
+
+        def render_selection_result():
+            result = state["selection_result"]
+            provider = state["provider"]
+            store = state["store"]
+            if result is None or provider is None:
+                return
+
+            mapping = provider["mapping"]
             category_selection_area.clear()
             with category_selection_area:
                 ui.separator()
@@ -801,6 +817,82 @@ def build_ui():
                             ui.label(f"{value:,}").classes(
                                 "text-2xl font-semibold text-slate-900"
                             )
+
+                manual_candidates = []
+                for item in result["selection"]["items"]:
+                    if item["status"] == "SELECTED" or item["reason_code"] in {
+                        "CATEGORY_LIMIT_REACHED",
+                        "MANUALLY_EXCLUDED",
+                    }:
+                        manual_candidates.append(item)
+
+                if manual_candidates and store is not None:
+                    ui.separator()
+                    ui.label("Revisión manual").classes(
+                        "text-base font-semibold text-slate-900"
+                    )
+                    ui.label(
+                        "Podés excluir productos seleccionados o incluir candidatos "
+                        "elegibles que quedaron fuera del cupo. La herramienta no "
+                        "rellena cupos automáticamente."
+                    ).classes("text-sm text-slate-600")
+                    options = {}
+                    for item in manual_candidates:
+                        row = item["row"]
+                        sku = str(row.get(mapping["sku"], "") or "")
+                        name = str(row.get(mapping["name"], "") or "")
+                        category = str(item["category"] or "")
+                        price = str(item["price"] or "")
+                        current = (
+                            "Incluido"
+                            if item["status"] == "SELECTED"
+                            else "No incluido"
+                        )
+                        options[item["row_number"]] = (
+                            f'{current} · {sku} · {name} · {category} · {price}'
+                        )
+                    product_selector = ui.select(
+                        options=options,
+                        label="Producto para revisar",
+                        with_input=True,
+                    ).classes("w-full")
+                    decision_selector = ui.select(
+                        options={
+                            "exclude": "Excluir de las altas",
+                            "include": "Incluir en las altas",
+                        },
+                        value="exclude",
+                        label="Decisión",
+                    ).classes("w-full")
+
+                    def apply_manual_decision():
+                        if product_selector.value is None:
+                            ui.notify("Seleccioná un producto para revisar.", type="warning")
+                            return
+                        try:
+                            state["selection_result"] = set_manual_product_selection(
+                                state["selection_result"],
+                                int(product_selector.value),
+                                include=decision_selector.value == "include",
+                                category_mappings=state["selection_category_mappings"],
+                                category_limits=state["selection_category_limits"],
+                            )
+                        except (KeyError, TypeError, ValueError) as exc:
+                            ui.notify(f"No se pudo aplicar la decisión: {exc}", type="negative")
+                            return
+                        render_selection_result()
+                        ui.notify("Decisión manual aplicada.", type="positive")
+
+                    ui.button(
+                        "Aplicar decisión manual",
+                        on_click=apply_manual_decision,
+                        icon="rule",
+                    ).props("outline color=primary")
+                elif store is None:
+                    ui.label(
+                        "La revisión manual y la exportación requieren una referencia "
+                        "WooCommerce confirmada para validar SKU y categorías de destino."
+                    ).classes("text-sm text-amber-800")
 
                 selection_rows = []
                 for item in result["selection"]["items"]:
@@ -853,7 +945,7 @@ def build_ui():
                         "WooCommerce con categorías observadas."
                     ).classes("text-sm text-amber-800")
 
-            ui.notify("Selección por categoría aplicada", type="positive")
+
 
         with ui.card().classes("w-full p-6 gap-4"):
             ui.label("4. Preparación de altas").classes(
