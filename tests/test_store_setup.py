@@ -39,7 +39,7 @@ class StoreSetupServiceTests(unittest.TestCase):
         self.assertEqual(result["headers"], ["SKU", "Name"])
 
     def test_inspection_rejects_rows_with_inconsistent_column_counts(self):
-        content = "SKU,Name\\nA-1,Product,Unexpected\\n".encode()
+        content = "SKU,Name\nA-1,Product,Unexpected\n".encode()
         with self.assertRaisesRegex(ValueError, "fila 2"):
             inspect_store_file(content, "store.csv")
 
