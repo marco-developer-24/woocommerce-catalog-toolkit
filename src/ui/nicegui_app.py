@@ -757,6 +757,7 @@ def build_ui():
                             clearable=True,
                         ).classes("w-full")
 
+                        accept_suggestion = None
                         if is_suggested:
                             match_label = (
                                 "Coincidencia exacta de categoría"
@@ -764,9 +765,12 @@ def build_ui():
                                 else "Coincidencia única por nombre"
                             )
                             ui.label(
-                                f" Sugerida · {suggested_destination} · {match_label}. "
-                                "Confirmá que sea el destino correcto."
+                                f"Sugerida · {suggested_destination} · {match_label}."
                             ).classes("text-sm text-blue-700")
+                            accept_suggestion = ui.checkbox(
+                                "Confirmo esta categoría de destino",
+                                value=False,
+                            )
                         elif suggestion["status"] == "ambiguous":
                             ui.label(
                                 "Coincidencia ambigua: hay varias categorías posibles. "
@@ -783,6 +787,7 @@ def build_ui():
                             "limit": limit,
                             "destination": destination,
                             "suggestion": suggestion,
+                            "accept_suggestion": accept_suggestion,
                         }
                     category_panels[key] = panel
 
@@ -822,6 +827,14 @@ def build_ui():
                     return
                 category_limits[controls["source"]] = int(raw_limit)
                 destination = controls["destination"].value
+                suggestion = controls["suggestion"]
+                acceptance = controls["accept_suggestion"]
+                if suggestion["status"] == "suggested" and not acceptance.value:
+                    ui.notify(
+                        f"Confirmá la categoría sugerida para {controls['source']}.",
+                        type="warning",
+                    )
+                    return
                 if destination:
                     category_mappings[key] = destination
 
