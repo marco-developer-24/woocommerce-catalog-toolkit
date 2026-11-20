@@ -51,7 +51,10 @@ def build_ui():
 
     ui.add_head_html("""<style>
         .catalog-upload .q-uploader__progress,
-        .catalog-upload .q-uploader__list { display: none !important; }
+        .catalog-upload .q-uploader__list,
+        .catalog-upload .q-uploader__header-content .q-uploader__subtitle {
+            display: none !important;
+        }
     </style>""")
 
     ui.colors(
@@ -336,7 +339,6 @@ def build_ui():
 
             provider_upload.on_upload(handle_provider_upload)
             provider_remove_button = ui.button(
-                "Quitar archivo",
                 on_click=clear_provider,
                 icon="close",
             ).props("flat round dense color=grey").tooltip(
