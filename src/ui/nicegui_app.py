@@ -98,8 +98,10 @@ def build_ui():
                 state["store"] = None
                 state["store_mode"] = "not_decided" if state["provider"] else "empty"
                 state["preparation"] = None
+                state["selection_result"] = None
                 store_selectors.clear()
                 preparation_results.clear()
+                category_selection_area.clear()
                 prepare_button.disable()
                 if state["provider"] is not None:
                     continue_without_store_button.enable()
