@@ -18,10 +18,32 @@ class AddProductsOperationTests(unittest.TestCase):
         self.assertEqual([x["status"] for x in result[READY]], [READY])
         self.assertEqual(result[READY][0]["changes"], {
             "SKU": "NEW-1", "Name": "New item", "Regular price": "125.5",
-            "Published": "0", "Type": "simple",
+            "Published": "-1", "Type": "simple",
         })
         self.assertEqual(len(result[EXCLUDED]), 1)
         self.assertEqual(len(result[BLOCKED]), 2)
+
+    def test_missing_zero_and_invalid_stock_are_reviewed_when_required(self):
+        supplier = [
+            {"SKU": "MISSING", "Name": "Missing stock", "Regular price": "1", "Stock": ""},
+            {"SKU": "ZERO", "Name": "Zero stock", "Regular price": "1", "Stock": "0"},
+            {"SKU": "INVALID", "Name": "Invalid stock", "Regular price": "1", "Stock": "unknown"},
+            {"SKU": "POSITIVE", "Name": "Available", "Regular price": "1", "Stock": "2"},
+        ]
+        result = prepare_add_products(
+            supplier, [], stock_column="Stock", require_positive_stock=True
+        )
+        self.assertEqual([item["sku"] for item in result[REVIEW]], ["MISSING", "ZERO", "INVALID"])
+        self.assertEqual([item["sku"] for item in result[READY]], ["POSITIVE"])
+
+    def test_absent_stock_column_reviews_all_when_required(self):
+        result = prepare_add_products(
+            [{"SKU": "NEW", "Name": "New", "Regular price": "1"}],
+            [],
+            require_positive_stock=True,
+        )
+        self.assertEqual(len(result[REVIEW]), 1)
+        self.assertEqual(result[READY], [])
 
     def test_duplicate_supplier_skus_are_blocked(self):
         rows = [

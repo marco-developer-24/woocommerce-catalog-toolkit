@@ -1,3 +1,4 @@
+from src.application.woocommerce_categories import escape_category_path
 """Application workflow for selecting and preparing new products.
 
 New-product classification runs before commercial selection so that existing
@@ -7,7 +8,7 @@ ready-to-add products are exported; nothing is published or sent to WooCommerce.
 
 from src.operations.add_products import prepare_add_products
 from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
-from src.operations.select_products import SELECTED, select_products
+from src.operations.select_products import SELECTED, normalize_category, select_products
 
 
 def _validate_mapping(mapping, label, required_keys):
@@ -106,6 +107,8 @@ def prepare_catalog(
         catalog_sku_column=catalog_sku_column,
         name_column=supplier_columns["name"],
         price_column=supplier_columns["price"],
+        stock_column=selection_config.get("stock_column"),
+        require_positive_stock=True,
     )
     ready_items = addition[READY]
 
@@ -121,12 +124,38 @@ def prepare_catalog(
 
     # select_products preserves input order, so each selection item maps back to
     # its original ready item and original supplier row number by position.
-    export_items = [
-        ready_item
-        for selection_item, ready_item in zip(selection["items"], ready_items)
-        if selection_item["status"] == SELECTED
-    ]
-    export_rows = [dict(item["changes"]) for item in export_items]
+    category_mappings = selection_config.get("category_mappings", {})
+    require_category_mapping = selection_config.get("require_category_mapping", False)
+    if not isinstance(category_mappings, dict):
+        raise ValueError("selection_config 'category_mappings' must be a dictionary.")
+
+    export_items = []
+    export_rows = []
+    unmapped_categories = 0
+    for selection_item, ready_item in zip(selection["items"], ready_items):
+        if selection_item["status"] != SELECTED:
+            continue
+
+        normalized_category = normalize_category(selection_item["category"])
+        destination = category_mappings.get(normalized_category)
+        if require_category_mapping and not destination:
+            selection_item.update(
+                status="INELIGIBLE",
+                reason_code="CATEGORY_NOT_MAPPED",
+                reason="Source category has no confirmed WooCommerce destination.",
+            )
+            category_summary = selection["summary"].get(normalized_category)
+            if category_summary:
+                category_summary["selected"] -= 1
+                category_summary["ineligible"] += 1
+            unmapped_categories += 1
+            continue
+
+        row = dict(ready_item["changes"])
+        if destination:
+            row["Categories"] = escape_category_path(destination)
+        export_items.append(ready_item)
+        export_rows.append(row)
 
     summary = {
         "supplier_rows": len(supplier_rows),
@@ -137,6 +166,7 @@ def prepare_catalog(
         "blocked": len(addition[BLOCKED]),
         "review": len(addition[REVIEW]),
         "ready_not_selected": len(ready_items) - len(export_items),
+        "unmapped_category": unmapped_categories,
     }
 
     return {

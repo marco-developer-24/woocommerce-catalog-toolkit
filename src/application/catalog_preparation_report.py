@@ -25,7 +25,11 @@ def build_preparation_review(result, category_column, price_column):
                 "Reason code": (
                     selection_item["reason_code"]
                     if selection_item is not None
-                    else operation_item["match_status"]
+                    else (
+                        "STOCK_REVIEW"
+                        if operation_item["status"] == "REVIEW"
+                        else operation_item["match_status"]
+                    )
                 ),
                 "Reason": (
                     selection_item["reason"]

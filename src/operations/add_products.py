@@ -7,7 +7,7 @@ from src.catalog_matcher import (
     STATUS_MISSING,
     classify_catalog_rows,
 )
-from .common import BLOCKED, EXCLUDED, READY, build_result, decimal_to_text, operation_item, parse_non_negative_decimal
+from .common import BLOCKED, EXCLUDED, READY, REVIEW, build_result, decimal_to_text, operation_item, parse_non_negative_decimal
 
 
 def prepare_add_products(
@@ -18,12 +18,15 @@ def prepare_add_products(
     catalog_sku_column="SKU",
     name_column="Name",
     price_column="Regular price",
+    stock_column=None,
+    require_positive_stock=False,
 ):
     """Classify rows for a new-products run; never changes existing products.
 
     Existing SKUs are excluded. Missing or ambiguous SKUs and invalid required
-    fields are blocked. Only unique new SKUs with a name and a finite,
-    non-negative price are marked READY. Input dictionaries are not mutated.
+    fields are blocked. When required, missing, invalid, or non-positive stock
+    is sent to REVIEW. Only unique new SKUs with valid fields and positive
+    stock are marked READY. Input dictionaries are not mutated.
     """
     classified = classify_catalog_rows(
         supplier_rows, catalog_rows, supplier_sku_column, catalog_sku_column
@@ -48,6 +51,20 @@ def prepare_add_products(
         if problems:
             items.append(operation_item(match, BLOCKED, " ".join(problems), sku_column=supplier_sku_column))
             continue
+        if require_positive_stock:
+            stock = parse_non_negative_decimal(
+                row.get(stock_column, "") if stock_column else ""
+            )
+            if stock is None or stock <= 0:
+                reason = (
+                    f"Missing, invalid, or non-positive stock in {stock_column!r}."
+                    if stock_column
+                    else "No supplier stock column is configured; manual review is required."
+                )
+                items.append(
+                    operation_item(match, REVIEW, reason, sku_column=supplier_sku_column)
+                )
+                continue
         items.append(operation_item(
             match,
             READY,
@@ -56,7 +73,7 @@ def prepare_add_products(
                 "SKU": str(row.get(supplier_sku_column, "")).strip(),
                 "Name": name,
                 "Regular price": decimal_to_text(price),
-                "Published": "0",
+                "Published": "-1",
                 "Type": "simple",
             },
             sku_column=supplier_sku_column,

@@ -48,6 +48,7 @@ class CatalogPreparationReviewTests(unittest.TestCase):
         self.assertEqual(rows[1]["Reason"], "Already exists")
         self.assertEqual(rows[2]["Reason"], "Duplicate SKU")
         self.assertEqual(rows[3]["Reason"], "Needs review")
+        self.assertEqual(rows[3]["Reason code"], "STOCK_REVIEW")
 
     def test_ready_product_outside_selection_is_reported(self):
         result = {

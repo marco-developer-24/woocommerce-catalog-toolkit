@@ -48,6 +48,27 @@ class TestReadCsvPreview(unittest.TestCase):
         self.assertEqual(total_rows, 1)
         self.assertEqual(blank_columns, 0)
 
+    def test_removes_repeated_utf8_bom_markers_at_file_start(self):
+        content = b"\xef\xbb\xbf\xef\xbb\xbfSKU,Name\nA-1,Product\n"
+
+        headers, rows = read_csv_rows(content, ",")
+
+        self.assertEqual(headers, ["SKU", "Name"])
+        self.assertEqual(rows[0]["SKU"], "A-1")
+
+    def test_pads_missing_trailing_columns_with_empty_values(self):
+        content = b"SKU,Name,Attribute 1,Attribute 2\nA-1,Product,Color\n"
+
+        headers, rows = read_csv_rows(content, ",")
+
+        self.assertEqual(headers, ["SKU", "Name", "Attribute 1", "Attribute 2"])
+        self.assertEqual(rows[0], {
+            "SKU": "A-1",
+            "Name": "Product",
+            "Attribute 1": "Color",
+            "Attribute 2": "",
+        })
+
     def test_preview_limit_does_not_limit_total_rows(self):
         content = "sku,name\n1,A\n2,B\n3,C\n".encode("utf-8")
 
@@ -111,10 +132,10 @@ class TestReadCsvPreview(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no tiene encabezado"):
             read_csv_preview(content, ",")
 
-    def test_rejects_rows_with_different_column_count(self):
-        content = "sku,name\n1,Keyboard\n2\n".encode("utf-8")
+    def test_rejects_rows_with_more_columns_than_header(self):
+        content = b"sku,name\n1,Keyboard\n2,Mouse,Unexpected\n"
 
-        with self.assertRaisesRegex(ValueError, "fila 3"):
+        with self.assertRaisesRegex(ValueError, "más columnas.*fila 3"):
             read_csv_preview(content, ",")
 
     def test_does_not_modify_original_bytes(self):
@@ -126,9 +147,9 @@ class TestReadCsvPreview(unittest.TestCase):
         self.assertEqual(content, original)
 
     def test_validates_rows_beyond_preview_limit(self):
-        content = "sku,name\n1,A\n2,B\n3\n".encode("utf-8")
+        content = b"sku,name\n1,A\n2,B\n3,C,Unexpected\n"
 
-        with self.assertRaisesRegex(ValueError, "fila 4"):
+        with self.assertRaisesRegex(ValueError, "más columnas.*fila 4"):
             read_csv_preview(content, ",", limit=1)
 
 
@@ -145,10 +166,10 @@ class TestReadCsvRows(unittest.TestCase):
             {"sku": "2", "name": "Second"},
         ])
 
-    def test_rejects_malformed_rows_after_preview_range(self):
-        content = b"sku,name\n1,First\n2\n"
+    def test_rejects_extra_columns_after_preview_range(self):
+        content = b"sku,name\n1,First\n2,Second,Unexpected\n"
 
-        with self.assertRaisesRegex(ValueError, "fila 3"):
+        with self.assertRaisesRegex(ValueError, "más columnas.*fila 3"):
             read_csv_rows(content, ",")
 
     def test_does_not_modify_source_bytes(self):
