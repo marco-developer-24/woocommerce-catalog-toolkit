@@ -32,10 +32,15 @@ def build_ui():
         "provider": None,
         "store_inspection": None,
         "store": None,
+        "store_mode": "not_decided",
         "preparation": None,
     }
     provider_selectors = {}
     store_selectors = {}
+
+    ui.add_head_html("""<style>
+        .catalog-upload .q-uploader__list { display: none !important; }
+    </style>""")
 
     ui.colors(
         primary="#2563eb",
@@ -80,25 +85,34 @@ def build_ui():
                     auto_upload=True,
                     max_file_size=MAX_UPLOAD_BYTES,
                     max_files=1,
-                ).props('accept=".csv"').classes("w-full")
+                ).props('accept=".csv"').classes("w-full catalog-upload")
 
-            def clear_store():
+            def clear_store(*, reset_upload=True):
+                if reset_upload:
+                    store_upload.reset()
                 state["store_inspection"] = None
                 state["store"] = None
+                state["store_mode"] = "not_decided" if state["provider"] else "empty"
                 state["preparation"] = None
                 store_selectors.clear()
                 preparation_results.clear()
+                prepare_button.disable()
+                continue_without_store_button.set_enabled(state["provider"] is not None)
                 preparation_status.set_text(
-                    "Podés preparar altas sin exportación de WooCommerce. "
-                    "Si la tienda ya tiene productos, cargarla permite detectar SKU existentes."
+                    "Elegí si vas a comparar con WooCommerce o continuar sin esa referencia."
                 )
-                store_status.set_text("Exportación de WooCommerce opcional para preparar altas.")
+                store_status.set_text(
+                    "Exportación opcional. Si la tienda ya tiene productos, cargá su exportación para detectar SKU existentes."
+                    if state["provider"] else "Primero cargá y confirmá el mapeo del proveedor."
+                )
                 store_status.classes(replace="text-sm text-slate-600")
                 store_details.clear()
                 store_mapping_area.clear()
                 store_confirmation.clear()
 
-            def clear_provider():
+            def clear_provider(*, reset_upload=True):
+                if reset_upload:
+                    provider_upload.reset()
                 state["provider_inspection"] = None
                 state["provider"] = None
                 provider_selectors.clear()
@@ -110,6 +124,7 @@ def build_ui():
                 provider_status.classes(replace="text-sm text-slate-600")
                 clear_store()
                 store_upload.disable()
+                continue_without_store_button.disable()
                 prepare_button.disable()
                 store_status.set_text("Primero cargá y confirmá el mapeo del proveedor.")
 
@@ -132,7 +147,8 @@ def build_ui():
                 state["provider"] = confirmed
                 clear_store()
                 store_upload.enable()
-                prepare_button.enable()
+                continue_without_store_button.enable()
+                prepare_button.disable()
                 store_status.set_text(
                     "Proveedor confirmado. Podés cargar WooCommerce o continuar sin ese archivo."
                 )
@@ -187,7 +203,7 @@ def build_ui():
                     ).props("color=primary")
 
             async def handle_provider_upload(event):
-                clear_provider()
+                clear_provider(reset_upload=False)
                 try:
                     file_bytes = event.content.read()
                     inspection = inspect_provider_file(file_bytes, event.name)
@@ -289,8 +305,14 @@ def build_ui():
                 auto_upload=True,
                 max_file_size=MAX_UPLOAD_BYTES,
                 max_files=1,
-            ).props('accept=".csv"').classes("w-full")
+            ).props('accept=".csv"').classes("w-full catalog-upload")
             store_upload.disable()
+            continue_without_store_button = ui.button(
+                "Continuar sin exportación WooCommerce",
+                on_click=lambda: continue_without_store(),
+                icon="skip_next",
+            ).props("outline color=secondary")
+            continue_without_store_button.disable()
             store_status.set_text("Primero cargá y confirmá el mapeo del proveedor.")
 
             def confirm_store_mapping():
@@ -318,6 +340,9 @@ def build_ui():
                     return
 
                 state["store"] = confirmed
+                state["store_mode"] = "reference"
+                prepare_button.enable()
+                continue_without_store_button.disable()
                 store_confirmation.clear()
                 summary = confirmed["summary"]
                 with store_confirmation:
@@ -401,7 +426,10 @@ def build_ui():
             async def handle_store_upload(event):
                 state["store_inspection"] = None
                 state["store"] = None
+                state["store_mode"] = "reading"
                 state["preparation"] = None
+                prepare_button.disable()
+                continue_without_store_button.disable()
                 preparation_results.clear()
                 preparation_status.set_text(
                     "Confirmá el mapeo de WooCommerce para usar esta exportación como referencia."
@@ -412,14 +440,22 @@ def build_ui():
                     file_bytes = event.content.read()
                     inspection = inspect_store_file(file_bytes, event.name)
                 except (UnicodeDecodeError, ValueError, TypeError) as exc:
+                    state["store_mode"] = "invalid"
                     store_status.set_text(
-                        f"No se pudo interpretar la exportación: {exc}"
+                        f"No se pudo interpretar la exportación: {exc}. "
+                        "La comparación está bloqueada. Reemplazá el archivo o quitálo "
+                        "y elegí continuar sin referencia."
                     )
                     store_status.classes(replace="text-sm text-red-700")
-                    ui.notify("No se pudo leer la exportación", type="negative")
+                    with store_details:
+                        ui.label(f"Archivo rechazado: {event.name}").classes(
+                            "text-sm font-medium text-slate-800"
+                        )
+                    ui.notify("No se pudo leer la exportación; preparación bloqueada", type="negative")
                     return
 
                 state["store_inspection"] = inspection
+                state["store_mode"] = "inspected"
                 store_status.set_text("Exportación leída correctamente")
                 store_status.classes(
                     replace="text-sm text-green-700 font-semibold"
@@ -456,10 +492,31 @@ def build_ui():
                 icon="delete_outline",
             ).props("flat color=grey")
 
+            def continue_without_store():
+                clear_store()
+                state["store_mode"] = "without_reference"
+                prepare_button.enable()
+                continue_without_store_button.disable()
+                store_status.set_text(
+                    "Continuarás sin comparar SKU existentes. La preparación no podrá confirmar si los productos ya están en la tienda."
+                )
+                store_status.classes(replace="text-sm text-amber-800 font-semibold")
+                preparation_status.set_text(
+                    "Referencia WooCommerce omitida explícitamente. Ya podés preparar las altas."
+                )
+                ui.notify("Se continuará sin referencia WooCommerce", type="warning")
+
         def prepare_addition():
             provider = state["provider"]
             if provider is None:
                 ui.notify("Primero confirmá el mapeo del proveedor.", type="warning")
+                return
+
+            if state["store_mode"] not in ("reference", "without_reference"):
+                ui.notify(
+                    "Resolvé primero el estado de la exportación WooCommerce o elegí continuar sin ella.",
+                    type="warning",
+                )
                 return
 
             if state["store_inspection"] is not None and state["store"] is None:
