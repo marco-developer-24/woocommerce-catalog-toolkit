@@ -499,22 +499,33 @@ def build_ui():
                 store_confirmation.clear()
                 store_details.clear()
                 try:
-                    file_bytes = event.content.read()
+                    # Support both NiceGUI upload event formats.
+                    if hasattr(event, "file"):
+                        file_bytes = await event.file.read()
+                        filename = event.file.name
+                    else:
+                        file_bytes = event.content.read()
+                        filename = event.name
+
                     store_upload.reset()
-                    inspection = inspect_store_file(file_bytes, event.name)
-                except (UnicodeDecodeError, ValueError, TypeError) as exc:
+                    inspection = inspect_store_file(file_bytes, filename)
+                except Exception as exc:
                     state["store_mode"] = "invalid"
                     store_status.set_text(
-                        f"No se pudo interpretar la exportación: {exc}. "
+                        f"No se pudo interpretar la exportación: "
+                        f"{type(exc).__name__}: {exc}. "
                         "La comparación está bloqueada. Reemplazá el archivo o quitálo "
                         "y elegí continuar sin referencia."
                     )
                     store_status.classes(replace="text-sm text-red-700")
                     with store_details:
-                        ui.label(f"Archivo rechazado: {event.name}").classes(
-                            "text-sm font-medium text-slate-800"
-                        )
-                    ui.notify("No se pudo leer la exportación; preparación bloqueada", type="negative")
+                        ui.label(
+                            f"Archivo rechazado: {locals().get('filename', 'WooCommerce')}"
+                        ).classes("text-sm font-medium text-slate-800")
+                    ui.notify(
+                        f"No se pudo procesar la exportación: {type(exc).__name__}",
+                        type="negative",
+                    )
                     return
 
                 state["store_inspection"] = inspection
