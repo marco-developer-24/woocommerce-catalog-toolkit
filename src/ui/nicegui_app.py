@@ -595,11 +595,12 @@ def build_ui():
             preparation_status = ui.label(
                 "Primero cargá y confirmá el mapeo del proveedor."
             ).classes("text-sm text-slate-600")
-            ui.button(
+            prepare_button = ui.button(
                 "Preparar altas",
                 on_click=prepare_addition,
                 icon="inventory",
             ).props("color=primary")
+            prepare_button.disable()
             preparation_results = ui.column().classes("w-full gap-3")
 
         with ui.row().classes("w-full justify-between items-center"):
