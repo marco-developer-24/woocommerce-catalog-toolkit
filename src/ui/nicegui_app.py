@@ -235,26 +235,25 @@ def build_ui():
                         icon="check",
                     ).props("color=primary")
 
-            def handle_provider_upload(event):
+            async def handle_provider_upload(event):
+                clear_provider(reset_upload=False)
                 provider_status.set_text("Archivo recibido. Procesando…")
                 provider_status.classes(
                     replace="text-sm text-blue-700 font-semibold"
                 )
                 try:
-                    clear_provider(reset_upload=False)
-                    provider_status.set_text("Archivo recibido. Procesando…")
-                    provider_status.classes(
-                        replace="text-sm text-blue-700 font-semibold"
-                    )
-                    file_bytes = event.content.read()
-                    inspection = inspect_provider_file(file_bytes, event.name)
+                    # NiceGUI 2 exposes content/name on the event; NiceGUI 3
+                    # exposes an asynchronous FileUpload object on event.file.
+                    if hasattr(event, "file"):
+                        file_bytes = await event.file.read()
+                        filename = event.file.name
+                    else:
+                        file_bytes = event.content.read()
+                        filename = event.name
 
+                    inspection = inspect_provider_file(file_bytes, filename)
                     state["provider_inspection"] = inspection
-                    provider_remove_button.set_visibility(True)
-                    provider_status.set_text("Archivo leído correctamente")
-                    provider_status.classes(
-                        replace="text-sm text-green-700 font-semibold"
-                    )
+
                     with provider_details:
                         with ui.row().classes("w-full flex-wrap gap-6"):
                             values = (
@@ -279,7 +278,7 @@ def build_ui():
                                     )
                         if inspection["ignored_empty_columns"]:
                             ui.label(
-                                f' se ignoraron {inspection["ignored_empty_columns"]} '
+                                f'Se ignoraron {inspection["ignored_empty_columns"]} '
                                 "columna(s) sin encabezado y completamente vacía(s)."
                             ).classes("text-sm text-amber-700")
 
@@ -311,18 +310,29 @@ def build_ui():
                             ui.label(
                                 "El CSV contiene encabezados, pero no tiene productos."
                             ).classes("text-sm text-amber-700")
+
                     render_provider_mapping(inspection)
+                    provider_status.set_text("Archivo leído correctamente")
+                    provider_status.classes(
+                        replace="text-sm text-green-700 font-semibold"
+                    )
+                    provider_remove_button.set_visibility(True)
                     ui.notify("CSV del proveedor inspeccionado", type="positive")
                 except Exception as exc:
+                    state["provider_inspection"] = None
                     provider_status.set_text(
                         f"Error al procesar el archivo: {type(exc).__name__}: {exc}"
                     )
                     provider_status.classes(replace="text-sm text-red-700")
+                    provider_mapping_status.set_text(
+                        "No se pudo generar el mapeo. Revisá el error del paso 1."
+                    )
+                    provider_mapping_status.classes(replace="text-sm text-red-700")
+                    provider_remove_button.set_visibility(False)
                     ui.notify(
                         f"Falló el procesamiento del CSV: {type(exc).__name__}",
                         type="negative",
                     )
-                    raise
 
             provider_upload.on_upload(handle_provider_upload)
             provider_remove_button = ui.button(
