@@ -10,7 +10,10 @@ from src.application.store_setup import (
     confirm_store_setup,
     inspect_store_file,
 )
+from src.application.catalog_preparation import prepare_catalog
+from src.application.catalog_exports import make_dict_rows_csv
 from src.operations.add_products import prepare_add_products
+from src.operations.select_products import normalize_category
 from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
 
 
@@ -34,6 +37,7 @@ def build_ui():
         "store": None,
         "store_mode": "not_decided",
         "preparation": None,
+        "selection_result": None,
     }
     provider_selectors = {}
     store_selectors = {}
@@ -513,6 +517,8 @@ def build_ui():
                 ui.notify("Se continuará sin referencia WooCommerce", type="warning")
 
         def prepare_addition():
+            category_selection_area.clear()
+            state["selection_result"] = None
             provider = state["provider"]
             if provider is None:
                 ui.notify("Primero confirmá el mapeo del proveedor.", type="warning")
@@ -646,6 +652,205 @@ def build_ui():
             preparation_status.set_text("Preparación de altas completada.")
             preparation_status.classes(replace="text-sm text-green-700 font-semibold")
             ui.notify("Clasificación de productos completada", type="positive")
+            render_category_selection()
+
+        def render_category_selection():
+            category_selection_area.clear()
+            category_controls.clear()
+            provider = state["provider"]
+            if provider is None:
+                return
+
+            mapping = provider["mapping"]
+            category_column = mapping.get("category")
+            if not category_column:
+                return
+
+            categories_by_key = {}
+            for row in provider["rows"]:
+                value = str(row.get(category_column, "") or "").strip()
+                key = normalize_category(value)
+                if key:
+                    categories_by_key.setdefault(key, value)
+
+            categories = sorted(categories_by_key.items(), key=lambda item: item[1].casefold())
+            store = state["store"]
+            destinations = store["observed_categories"] if store else []
+
+            with category_selection_area:
+                ui.separator()
+                ui.label("5. Selección por categoría").classes(
+                    "text-lg font-semibold text-slate-900"
+                )
+                ui.label(
+                    "Activá las categorías que querés preparar y definí un cupo. "
+                    "Dentro de cada categoría se prioriza el menor precio."
+                ).classes("text-sm text-slate-600")
+                if not destinations:
+                    ui.label(
+                        "No hay categorías de destino verificadas. Podés configurar "
+                        "la selección, pero no se habilitará la exportación sin una "
+                        "exportación WooCommerce que permita asignar categorías existentes."
+                    ).classes("text-sm text-amber-800")
+
+                for key, category in categories:
+                    with ui.card().classes("w-full p-3 gap-2"):
+                        with ui.row().classes("w-full items-center gap-3"):
+                            enabled = ui.checkbox(category, value=False)
+                            limit = ui.number(
+                                label="Cupo",
+                                value=0,
+                                min=0,
+                                precision=0,
+                            ).classes("w-28")
+                        destination = ui.select(
+                            options=destinations,
+                            label="Categoría de destino en WooCommerce",
+                            clearable=True,
+                        ).classes("w-full")
+                        category_controls[key] = {
+                            "source": category,
+                            "enabled": enabled,
+                            "limit": limit,
+                            "destination": destination,
+                        }
+
+                ui.button(
+                    "Aplicar selección",
+                    on_click=apply_category_selection,
+                    icon="playlist_add_check",
+                ).props("color=primary")
+
+        def apply_category_selection():
+            provider = state["provider"]
+            if provider is None:
+                return
+
+            category_limits = {}
+            category_mappings = {}
+            for key, controls in category_controls.items():
+                if not controls["enabled"].value:
+                    continue
+                raw_limit = controls["limit"].value
+                if raw_limit is None or int(raw_limit) < 0:
+                    ui.notify(
+                        f"Definí un cupo válido para {controls['source']}.",
+                        type="warning",
+                    )
+                    return
+                category_limits[controls["source"]] = int(raw_limit)
+                destination = controls["destination"].value
+                if destination:
+                    category_mappings[key] = destination
+
+            if not category_limits:
+                ui.notify("Activá al menos una categoría para continuar.", type="warning")
+                return
+
+            store = state["store"]
+            catalog_rows = store["rows"] if store else []
+            catalog_sku_column = store["mapping"]["sku"] if store else "SKU"
+            mapping = provider["mapping"]
+
+            try:
+                result = prepare_catalog(
+                    provider["rows"],
+                    catalog_rows,
+                    selection_config={
+                        "category_column": mapping["category"],
+                        "price_column": mapping["price"],
+                        "category_limits": category_limits,
+                        "stock_column": mapping.get("stock"),
+                        "category_mappings": category_mappings,
+                        "require_category_mapping": True,
+                    },
+                    supplier_columns={
+                        "sku": mapping["sku"],
+                        "name": mapping["name"],
+                        "price": mapping["price"],
+                        "catalog_sku": catalog_sku_column,
+                    },
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                state["selection_result"] = None
+                ui.notify(f"No se pudo aplicar la selección: {exc}", type="negative")
+                return
+
+            state["selection_result"] = result
+            category_selection_area.clear()
+            with category_selection_area:
+                ui.separator()
+                ui.label("Resultado de la selección").classes(
+                    "text-lg font-semibold text-slate-900"
+                )
+                summary = result["summary"]
+                with ui.grid(columns=2).classes("w-full gap-3"):
+                    for label, value in (
+                        ("Elegibles antes de seleccionar", summary["new_ready"]),
+                        ("Preparados para exportar", summary["exported"]),
+                        ("En revisión", summary["review"]),
+                        ("Bloqueados", summary["blocked"]),
+                        ("Ya existentes", summary["excluded_existing"]),
+                        ("Fuera del cupo o sin categoría", summary["ready_not_selected"]),
+                    ):
+                        with ui.card().classes("p-3 gap-1"):
+                            ui.label(label).classes("text-xs text-slate-500")
+                            ui.label(f"{value:,}").classes(
+                                "text-2xl font-semibold text-slate-900"
+                            )
+
+                selection_rows = []
+                for item in result["selection"]["items"]:
+                    selection_rows.append({
+                        "row_number": item["row_number"],
+                        "sku": str(item["row"].get(mapping["sku"], "") or ""),
+                        "name": str(item["row"].get(mapping["name"], "") or ""),
+                        "category": str(item["category"] or ""),
+                        "price": str(item["price"] or ""),
+                        "status": item["status"],
+                        "reason": item["reason"] or "",
+                    })
+                ui.table(
+                    columns=[
+                        {"name": "row_number", "label": "Fila", "field": "row_number"},
+                        {"name": "sku", "label": "SKU", "field": "sku"},
+                        {"name": "name", "label": "Producto", "field": "name"},
+                        {"name": "category", "label": "Categoría", "field": "category"},
+                        {"name": "price", "label": "Precio", "field": "price"},
+                        {"name": "status", "label": "Selección", "field": "status"},
+                        {"name": "reason", "label": "Motivo", "field": "reason"},
+                    ],
+                    rows=selection_rows,
+                    row_key="row_number",
+                    pagination=20,
+                ).classes("w-full")
+
+                if result["export_rows"] and store is not None:
+                    export_fields = [
+                        "SKU", "Name", "Regular price", "Published", "Type", "Categories"
+                    ]
+                    csv_content = make_dict_rows_csv(
+                        result["export_rows"], export_fields
+                    )
+                    ui.button(
+                        "Descargar CSV de altas",
+                        on_click=lambda data=csv_content: ui.download(
+                            data, "woocommerce-altas.csv"
+                        ),
+                        icon="download",
+                    ).props("color=primary")
+                    ui.label(
+                        "El archivo contiene únicamente productos seleccionados, "
+                        "con SKU único, precio validado y estado borrador."
+                    ).classes("text-sm text-green-700")
+                else:
+                    ui.label(
+                        "No hay productos exportables. Revisá los cupos y las "
+                        "categorías de destino. La exportación requiere una referencia "
+                        "WooCommerce con categorías observadas."
+                    ).classes("text-sm text-amber-800")
+
+            ui.notify("Selección por categoría aplicada", type="positive")
 
         with ui.card().classes("w-full p-6 gap-4"):
             ui.label("4. Preparación de altas").classes(
@@ -665,6 +870,8 @@ def build_ui():
             ).props("color=primary")
             prepare_button.disable()
             preparation_results = ui.column().classes("w-full gap-3")
+            category_selection_area = ui.column().classes("w-full gap-3")
+            category_controls = {}
 
         with ui.row().classes("w-full justify-between items-center"):
             ui.label("MVP · Procesamiento local · Sin escritura en WooCommerce").classes(
