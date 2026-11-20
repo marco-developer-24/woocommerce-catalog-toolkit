@@ -406,7 +406,7 @@ def build_ui():
                 summary = confirmed["summary"]
                 with store_confirmation:
                     ui.separator()
-                    ui.label("4. Resultado de la comparación").classes(
+                    ui.label("Resultado de la comparación").classes(
                         "text-lg font-semibold text-slate-900"
                     )
                     ui.label(
