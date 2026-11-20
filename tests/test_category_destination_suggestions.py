@@ -52,6 +52,12 @@ class CategoryDestinationSuggestionTests(unittest.TestCase):
             )
         )
 
+    def test_cleared_suggested_destination_is_not_valid(self):
+        suggestion = {"status": "suggested", "destination": "Components > RAM"}
+        self.assertFalse(
+            is_destination_selection_confirmed(suggestion, None, None)
+        )
+
     def test_manual_destination_does_not_require_suggestion_confirmation(self):
         suggestion = {"status": "suggested", "destination": "Components > RAM"}
         self.assertTrue(

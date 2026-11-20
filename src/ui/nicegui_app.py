@@ -776,15 +776,23 @@ def build_ui():
                                 value=False,
                             )
 
-                            def record_suggestion_confirmation(event):
-                                accepted_destination["value"] = (
-                                    destination.value if event.value else None
+                            def record_suggestion_confirmation(
+                                event,
+                                destination_selector=destination,
+                                accepted_state=accepted_destination,
+                            ):
+                                accepted_state["value"] = (
+                                    destination_selector.value if event.value else None
                                 )
 
-                            def invalidate_suggestion_confirmation(_):
-                                accepted_destination["value"] = None
-                                if accept_suggestion.value:
-                                    accept_suggestion.set_value(False)
+                            def invalidate_suggestion_confirmation(
+                                _,
+                                confirmation_checkbox=accept_suggestion,
+                                accepted_state=accepted_destination,
+                            ):
+                                accepted_state["value"] = None
+                                if confirmation_checkbox.value:
+                                    confirmation_checkbox.set_value(False)
 
                             accept_suggestion.on_value_change(
                                 record_suggestion_confirmation

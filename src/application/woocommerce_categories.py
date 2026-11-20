@@ -127,6 +127,8 @@ def is_destination_selection_confirmed(
     if suggestion.get("status") != "suggested":
         return True
     suggested_destination = suggestion.get("destination")
+    if not selected_destination:
+        return False
     if selected_destination != suggested_destination:
         return True
     return confirmed_destination == selected_destination
