@@ -12,6 +12,7 @@ from src.application.store_setup import (
 )
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_exports import make_dict_rows_csv
+from src.application.woocommerce_categories import suggest_destination_categories
 from src.application.manual_product_selection import set_manual_product_selection
 from src.operations.add_products import prepare_add_products
 from src.operations.select_products import normalize_category
@@ -688,6 +689,10 @@ def build_ui():
 
             store = state["store"]
             destinations = store["observed_categories"] if store else []
+            suggestions = suggest_destination_categories(
+                [category for _, category in categories],
+                destinations,
+            ) if destinations else {}
             category_panels = {}
 
             with category_selection_area:
@@ -696,15 +701,15 @@ def build_ui():
                     "text-lg font-semibold text-slate-900"
                 )
                 ui.label(
-                    "Activá las categorías que querés preparar y definí un cupo. "
-                    "Dentro de cada categoría se prioriza el menor precio."
+                    "Las categorías con una correspondencia confiable se preseleccionan. "
+                    "Revisá el destino sugerido y definí cuántos productos querés preparar."
                 ).classes("text-sm text-slate-600")
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label(f"{len(categories)} categorías · {len(provider['rows']):,} productos").classes(
                         "text-xs text-slate-500"
                     )
-                    ui.label("Las categorías están contraídas para facilitar la navegación.").classes(
-                        "text-xs text-slate-500"
+                    ui.label("La sugerencia no confirma el destino ni selecciona todos los productos.").classes(
+                        "text-xs text-amber-700"
                     )
                 category_filter = ui.input(
                     label="Buscar categoría",
@@ -719,29 +724,65 @@ def build_ui():
                     ).classes("text-sm text-amber-800")
 
                 for key, category in categories:
+                    suggestion = suggestions.get(key, {
+                        "status": "unmatched",
+                        "destination": None,
+                        "match_type": None,
+                    })
+                    suggested_destination = suggestion["destination"]
+                    is_suggested = suggestion["status"] == "suggested"
+                    initially_enabled = is_suggested
+
                     with ui.expansion(
                         f"{category} · {category_counts.get(key, 0):,} productos",
                         icon="category",
                         value=False,
                     ).classes("w-full border border-slate-200 rounded-lg") as panel:
                         with ui.row().classes("w-full items-center gap-3"):
-                            enabled = ui.checkbox("Incluir categoría", value=False)
+                            enabled = ui.checkbox(
+                                "Incluir categoría",
+                                value=initially_enabled,
+                            )
                             limit = ui.number(
                                 label="Cupo de productos",
                                 value=0,
                                 min=0,
                                 precision=0,
                             ).classes("w-40")
+
                         destination = ui.select(
                             options=destinations,
+                            value=suggested_destination,
                             label="Categoría de destino en WooCommerce",
                             clearable=True,
                         ).classes("w-full")
+
+                        if is_suggested:
+                            match_label = (
+                                "Coincidencia exacta de categoría"
+                                if suggestion["match_type"] == "exact_path"
+                                else "Coincidencia única por nombre"
+                            )
+                            ui.label(
+                                f" Sugerida · {suggested_destination} · {match_label}. "
+                                "Confirmá que sea el destino correcto."
+                            ).classes("text-sm text-blue-700")
+                        elif suggestion["status"] == "ambiguous":
+                            ui.label(
+                                "Coincidencia ambigua: hay varias categorías posibles. "
+                                "Elegí el destino manualmente."
+                            ).classes("text-sm text-amber-800")
+                        else:
+                            ui.label(
+                                "Sin coincidencia confiable. Elegí una categoría de destino."
+                            ).classes("text-sm text-amber-800")
+
                         category_controls[key] = {
                             "source": category,
                             "enabled": enabled,
                             "limit": limit,
                             "destination": destination,
+                            "suggestion": suggestion,
                         }
                     category_panels[key] = panel
 
