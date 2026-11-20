@@ -400,6 +400,12 @@ def build_ui():
 
                 state["store"] = confirmed
                 state["store_mode"] = "reference"
+                preparation_status.set_text(
+                    "Comparación completada. Ya podés preparar las altas."
+                )
+                preparation_status.classes(
+                    replace="text-sm text-green-700 font-semibold"
+                )
                 prepare_button.enable()
                 continue_without_store_button.disable()
                 store_confirmation.clear()
