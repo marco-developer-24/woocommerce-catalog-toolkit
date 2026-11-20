@@ -50,7 +50,6 @@ def build_ui():
     store_selectors = {}
 
     ui.add_head_html("""<style>
-         .catalog-upload .q-uploader__list,
         .catalog-upload .q-uploader__progress { display: none !important; }
     </style>""")
 
@@ -94,6 +93,13 @@ def build_ui():
             )
             provider_details = ui.column().classes("w-full gap-3")
             provider_preview = ui.column().classes("w-full gap-2")
+            ui.separator()
+            ui.label("2. Mapeo de columnas del proveedor").classes(
+                "text-lg font-semibold text-slate-900"
+            )
+            provider_mapping_status = ui.label(
+                "Pendiente de cargar y procesar el archivo del proveedor."
+            ).classes("text-sm text-slate-500")
             provider_mapping_area = ui.column().classes("w-full gap-3")
             provider_confirmation = ui.column().classes("w-full gap-2")
 
@@ -143,6 +149,10 @@ def build_ui():
                 provider_details.clear()
                 provider_preview.clear()
                 provider_mapping_area.clear()
+                provider_mapping_status.set_text(
+                    "Pendiente de cargar y procesar el archivo del proveedor."
+                )
+                provider_mapping_status.classes(replace="text-sm text-slate-500")
                 provider_confirmation.clear()
                 provider_status.set_text("Esperando un archivo CSV…")
                 provider_status.classes(replace="text-sm text-slate-600")
@@ -204,15 +214,12 @@ def build_ui():
                 provider_selectors.clear()
                 provider_mapping_area.clear()
                 provider_confirmation.clear()
+                provider_mapping_status.set_text(
+                    f'Perfil detectado: {inspection["profile"]}. '
+                    "Revisá las sugerencias antes de confirmar."
+                )
+                provider_mapping_status.classes(replace="text-sm text-blue-700")
                 with provider_mapping_area:
-                    ui.separator()
-                    ui.label("2. Mapeo de columnas del proveedor").classes(
-                        "text-lg font-semibold text-slate-900"
-                    )
-                    ui.label(
-                        f'Perfil detectado: {inspection["profile"]}. '
-                        "Revisá las sugerencias antes de confirmar."
-                    ).classes("text-sm text-slate-600")
                     for field, label in PROVIDER_MAPPING_FIELDS:
                         provider_selectors[field] = ui.select(
                             options=inspection["headers"],
@@ -230,7 +237,6 @@ def build_ui():
                 clear_provider(reset_upload=False)
                 try:
                     file_bytes = event.content.read()
-                    provider_upload.reset()
                     inspection = inspect_provider_file(file_bytes, event.name)
                 except (UnicodeDecodeError, ValueError, TypeError) as exc:
                     provider_status.set_text(
