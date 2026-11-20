@@ -97,7 +97,10 @@ def build_ui():
                 store_selectors.clear()
                 preparation_results.clear()
                 prepare_button.disable()
-                continue_without_store_button.set_enabled(state["provider"] is not None)
+                if state["provider"] is not None:
+                    continue_without_store_button.enable()
+                else:
+                    continue_without_store_button.disable()
                 preparation_status.set_text(
                     "Elegí si vas a comparar con WooCommerce o continuar sin esa referencia."
                 )
