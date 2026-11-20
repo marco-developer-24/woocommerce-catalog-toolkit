@@ -77,10 +77,10 @@ def build_ui():
             ).classes("text-slate-600")
 
         with ui.tabs().classes("w-full") as workflow_tabs:
-            tab_files = ui.tab("Archivos", icon="folder_open")
-            tab_comparison = ui.tab("Comparación", icon="compare_arrows")
-            tab_selection = ui.tab("Selección", icon="tune")
-            tab_export = ui.tab("Exportación", icon="download")
+            ui.tab("files", label="Archivos", icon="folder_open")
+            ui.tab("comparison", label="Comparación", icon="compare_arrows")
+            ui.tab("selection", label="Selección", icon="tune")
+            ui.tab("export", label="Exportación", icon="download")
 
         with ui.card().classes("w-full p-6 gap-4") as provider_panel:
             ui.label("1. Archivo del proveedor").classes(
@@ -672,7 +672,7 @@ def build_ui():
             preparation_status.classes(replace="text-sm text-green-700 font-semibold")
             ui.notify("Clasificación de productos completada", type="positive")
             render_category_selection()
-            workflow_tabs.value = tab_selection
+            workflow_tabs.value = "selection"
 
         def render_category_selection():
             category_selection_area.clear()
@@ -999,33 +999,6 @@ def build_ui():
                         label="Decisión",
                     ).classes("w-full")
 
-
-            export_area.clear()
-            with export_area:
-                    if result["export_rows"] and store is not None:
-                        export_fields = [
-                            "SKU", "Name", "Regular price", "Published", "Type", "Categories"
-                        ]
-                        csv_content = make_dict_rows_csv(
-                            result["export_rows"], export_fields
-                        )
-                        ui.button(
-                            "Descargar CSV de altas",
-                            on_click=lambda data=csv_content: ui.download(
-                                data, "woocommerce-altas.csv"
-                            ),
-                            icon="download",
-                        ).props("color=primary")
-                        ui.label(
-                            "El archivo contiene únicamente productos seleccionados, "
-                            "con SKU único, precio validado y estado borrador."
-                        ).classes("text-sm text-green-700")
-                    else:
-                        ui.label(
-                            "No hay productos exportables. Revisá los cupos y las "
-                            "categorías de destino. La exportación requiere una referencia "
-                            "WooCommerce con categorías observadas."
-                        ).classes("text-sm text-amber-800")
                     def apply_manual_decision():
                         if product_selector.value is None:
                             ui.notify("Seleccioná un producto para revisar.", type="warning")
@@ -1081,6 +1054,31 @@ def build_ui():
                     pagination=20,
                 ).classes("w-full")
 
+            with export_area:
+                if result["export_rows"] and store is not None:
+                    export_fields = [
+                        "SKU", "Name", "Regular price", "Published", "Type", "Categories"
+                    ]
+                    csv_content = make_dict_rows_csv(
+                        result["export_rows"], export_fields
+                    )
+                    ui.button(
+                        "Descargar CSV de altas",
+                        on_click=lambda data=csv_content: ui.download(
+                            data, "woocommerce-altas.csv"
+                        ),
+                        icon="download",
+                    ).props("color=primary")
+                    ui.label(
+                        "El archivo contiene únicamente productos seleccionados, "
+                        "con SKU único, precio validado y estado borrador."
+                    ).classes("text-sm text-green-700")
+                else:
+                    ui.label(
+                        "No hay productos exportables. Revisá los cupos y las "
+                        "categorías de destino. La exportación requiere una referencia "
+                        "WooCommerce con categorías observadas."
+                    ).classes("text-sm text-amber-800")
 
 
 
@@ -1121,13 +1119,14 @@ def build_ui():
 
         def update_workflow_tab(event):
             active_tab = event.value
-            provider_panel.set_visibility(active_tab == tab_files)
-            store_panel.set_visibility(active_tab == tab_files)
-            preparation_panel.set_visibility(active_tab == tab_comparison)
-            selection_panel.set_visibility(active_tab == tab_selection)
-            export_panel.set_visibility(active_tab == tab_export)
+            provider_panel.set_visibility(active_tab == "files")
+            store_panel.set_visibility(active_tab == "files")
+            preparation_panel.set_visibility(active_tab == "comparison")
+            selection_panel.set_visibility(active_tab == "selection")
+            export_panel.set_visibility(active_tab == "export")
 
         workflow_tabs.on_value_change(update_workflow_tab)
+        workflow_tabs.value = "files"
         store_panel.set_visibility(True)
         preparation_panel.set_visibility(False)
         selection_panel.set_visibility(False)
