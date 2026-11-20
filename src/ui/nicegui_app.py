@@ -50,8 +50,11 @@ def build_ui():
     store_selectors = {}
 
     ui.add_head_html("""<style>
-         .catalog-upload .q-uploader__list,
-        .catalog-upload .q-uploader__progress { display: none !important; }
+        .catalog-upload .q-uploader__progress,
+        .catalog-upload .q-uploader__list,
+        .catalog-upload .q-uploader__header-content .q-uploader__subtitle {
+            display: none !important;
+        }
     </style>""")
 
     ui.colors(
@@ -76,7 +79,13 @@ def build_ui():
                 "con una exportación de WooCommerce. No se modifica la tienda."
             ).classes("text-slate-600")
 
-        with ui.card().classes("w-full p-6 gap-4"):
+        with ui.tabs().classes("w-full") as workflow_tabs:
+            ui.tab("files", label="Archivos", icon="folder_open")
+            ui.tab("comparison", label="Comparación", icon="compare_arrows")
+            ui.tab("selection", label="Selección", icon="tune")
+            ui.tab("export", label="Exportación", icon="download")
+
+        with ui.card().classes("w-full p-6 gap-4") as provider_panel:
             ui.label("1. Archivo del proveedor").classes(
                 "text-lg font-semibold text-slate-900"
             )
@@ -86,11 +95,6 @@ def build_ui():
             provider_status = ui.label("Esperando un archivo CSV…").classes(
                 "text-sm text-slate-600"
             )
-            provider_details = ui.column().classes("w-full gap-3")
-            provider_preview = ui.column().classes("w-full gap-2")
-            provider_mapping_area = ui.column().classes("w-full gap-3")
-            provider_confirmation = ui.column().classes("w-full gap-2")
-
             with ui.column().classes("w-full gap-2"):
                 provider_upload = ui.upload(
                     label="Seleccionar CSV del proveedor",
@@ -98,6 +102,18 @@ def build_ui():
                     max_file_size=MAX_UPLOAD_BYTES,
                     max_files=1,
                 ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
+            provider_details = ui.column().classes("w-full gap-3")
+            provider_preview = ui.column().classes("w-full gap-2")
+
+            ui.separator()
+            ui.label("2. Mapeo de columnas del proveedor").classes(
+                "text-lg font-semibold text-slate-900"
+            )
+            provider_mapping_status = ui.label(
+                "Pendiente de cargar y procesar el archivo del proveedor."
+            ).classes("text-sm text-slate-500")
+            provider_mapping_area = ui.column().classes("w-full gap-3")
+            provider_confirmation = ui.column().classes("w-full gap-2")
 
             def clear_store(*, reset_upload=True):
                 if reset_upload:
@@ -110,6 +126,7 @@ def build_ui():
                 store_selectors.clear()
                 preparation_results.clear()
                 category_selection_area.clear()
+                export_area.clear()
                 prepare_button.disable()
                 if state["provider"] is not None:
                     continue_without_store_button.enable()
@@ -136,7 +153,12 @@ def build_ui():
                 provider_details.clear()
                 provider_preview.clear()
                 provider_mapping_area.clear()
+                provider_mapping_status.set_text(
+                    "Pendiente de cargar y procesar el archivo del proveedor."
+                )
+                provider_mapping_status.classes(replace="text-sm text-slate-500")
                 provider_confirmation.clear()
+                provider_remove_button.set_visibility(False)
                 provider_status.set_text("Esperando un archivo CSV…")
                 provider_status.classes(replace="text-sm text-slate-600")
                 clear_store()
@@ -197,15 +219,12 @@ def build_ui():
                 provider_selectors.clear()
                 provider_mapping_area.clear()
                 provider_confirmation.clear()
+                provider_mapping_status.set_text(
+                    f'Perfil detectado: {inspection["profile"]}. '
+                    "Revisá las sugerencias antes de confirmar."
+                )
+                provider_mapping_status.classes(replace="text-sm text-blue-700")
                 with provider_mapping_area:
-                    ui.separator()
-                    ui.label("2. Mapeo de columnas del proveedor").classes(
-                        "text-lg font-semibold text-slate-900"
-                    )
-                    ui.label(
-                        f'Perfil detectado: {inspection["profile"]}. '
-                        "Revisá las sugerencias antes de confirmar."
-                    ).classes("text-sm text-slate-600")
                     for field, label in PROVIDER_MAPPING_FIELDS:
                         provider_selectors[field] = ui.select(
                             options=inspection["headers"],
@@ -221,90 +240,113 @@ def build_ui():
 
             async def handle_provider_upload(event):
                 clear_provider(reset_upload=False)
+                provider_status.set_text("Archivo recibido. Procesando…")
+                provider_status.classes(
+                    replace="text-sm text-blue-700 font-semibold"
+                )
                 try:
-                    file_bytes = event.content.read()
-                    provider_upload.reset()
-                    inspection = inspect_provider_file(file_bytes, event.name)
-                except (UnicodeDecodeError, ValueError, TypeError) as exc:
+                    # NiceGUI 2 exposes content/name on the event; NiceGUI 3
+                    # exposes an asynchronous FileUpload object on event.file.
+                    if hasattr(event, "file"):
+                        file_bytes = await event.file.read()
+                        filename = event.file.name
+                    else:
+                        file_bytes = event.content.read()
+                        filename = event.name
+
+                    inspection = inspect_provider_file(file_bytes, filename)
+                    state["provider_inspection"] = inspection
+
+                    with provider_details:
+                        with ui.row().classes("w-full flex-wrap gap-6"):
+                            values = (
+                                ("ARCHIVO", inspection["filename"]),
+                                ("FILAS", f'{len(inspection["rows"]):,}'),
+                                ("COLUMNAS", str(len(inspection["headers"]))),
+                                (
+                                    "SEPARADOR",
+                                    "Tabulación"
+                                    if inspection["detected_delimiter"] == "\\t"
+                                    else inspection["detected_delimiter"],
+                                ),
+                                ("PERFIL", inspection["profile"]),
+                            )
+                            for label, value in values:
+                                with ui.column().classes("gap-0"):
+                                    ui.label(label).classes(
+                                        "text-xs font-semibold text-slate-500"
+                                    )
+                                    ui.label(value).classes(
+                                        "font-medium text-slate-900"
+                                    )
+                        if inspection["ignored_empty_columns"]:
+                            ui.label(
+                                f'Se ignoraron {inspection["ignored_empty_columns"]} '
+                                "columna(s) sin encabezado y completamente vacía(s)."
+                            ).classes("text-sm text-amber-700")
+
+                    with provider_preview:
+                        ui.label("Vista previa · Primeras 5 filas").classes(
+                            "text-base font-semibold text-slate-900"
+                        )
+                        headers = inspection["headers"][:6]
+                        rows = [
+                            {header: row.get(header, "") for header in headers}
+                            for row in inspection["rows"][:PREVIEW_LIMIT]
+                        ]
+                        if rows:
+                            columns = [
+                                {
+                                    "name": header,
+                                    "label": header,
+                                    "field": header,
+                                    "align": "left",
+                                }
+                                for header in headers
+                            ]
+                            ui.table(
+                                columns=columns,
+                                rows=rows,
+                                row_key=headers[0],
+                            ).classes("w-full")
+                        else:
+                            ui.label(
+                                "El CSV contiene encabezados, pero no tiene productos."
+                            ).classes("text-sm text-amber-700")
+
+                    render_provider_mapping(inspection)
+                    provider_status.set_text("Archivo leído correctamente")
+                    provider_status.classes(
+                        replace="text-sm text-green-700 font-semibold"
+                    )
+                    provider_remove_button.set_visibility(True)
+                    ui.notify("CSV del proveedor inspeccionado", type="positive")
+                except Exception as exc:
+                    state["provider_inspection"] = None
                     provider_status.set_text(
-                        f"No se pudo interpretar el archivo: {exc}"
+                        f"Error al procesar el archivo: {type(exc).__name__}: {exc}"
                     )
                     provider_status.classes(replace="text-sm text-red-700")
-                    ui.notify("No se pudo leer el CSV del proveedor", type="negative")
-                    return
-
-                state["provider_inspection"] = inspection
-                provider_status.set_text("Archivo leído correctamente")
-                provider_status.classes(
-                    replace="text-sm text-green-700 font-semibold"
-                )
-                with provider_details:
-                    with ui.row().classes("w-full flex-wrap gap-6"):
-                        values = (
-                            ("ARCHIVO", inspection["filename"]),
-                            ("FILAS", f'{len(inspection["rows"]):,}'),
-                            ("COLUMNAS", str(len(inspection["headers"]))),
-                            (
-                                "SEPARADOR",
-                                "Tabulación"
-                                if inspection["detected_delimiter"] == "\t"
-                                else inspection["detected_delimiter"],
-                            ),
-                            ("PERFIL", inspection["profile"]),
-                        )
-                        for label, value in values:
-                            with ui.column().classes("gap-0"):
-                                ui.label(label).classes(
-                                    "text-xs font-semibold text-slate-500"
-                                )
-                                ui.label(value).classes(
-                                    "font-medium text-slate-900"
-                                )
-                    if inspection["ignored_empty_columns"]:
-                        ui.label(
-                            f'Se ignoraron {inspection["ignored_empty_columns"]} '
-                            "columna(s) sin encabezado y completamente vacía(s)."
-                        ).classes("text-sm text-amber-700")
-
-                with provider_preview:
-                    ui.label("Vista previa · Primeras 5 filas").classes(
-                        "text-base font-semibold text-slate-900"
+                    provider_mapping_status.set_text(
+                        "No se pudo generar el mapeo. Revisá el error del paso 1."
                     )
-                    headers = inspection["headers"][:6]
-                    rows = [
-                        {header: row.get(header, "") for header in headers}
-                        for row in inspection["rows"][:PREVIEW_LIMIT]
-                    ]
-                    if rows:
-                        columns = [
-                            {
-                                "name": header,
-                                "label": header,
-                                "field": header,
-                                "align": "left",
-                            }
-                            for header in headers
-                        ]
-                        ui.table(
-                            columns=columns,
-                            rows=rows,
-                            row_key=headers[0],
-                        ).classes("w-full")
-                    else:
-                        ui.label(
-                            "El CSV contiene encabezados, pero no tiene productos."
-                        ).classes("text-sm text-amber-700")
-                render_provider_mapping(inspection)
-                ui.notify("CSV del proveedor inspeccionado", type="positive")
+                    provider_mapping_status.classes(replace="text-sm text-red-700")
+                    provider_remove_button.set_visibility(False)
+                    ui.notify(
+                        f"Falló el procesamiento del CSV: {type(exc).__name__}",
+                        type="negative",
+                    )
 
             provider_upload.on_upload(handle_provider_upload)
-            ui.button(
-                "Quitar archivo del proveedor",
+            provider_remove_button = ui.button(
                 on_click=clear_provider,
-                icon="delete_outline",
-            ).props("flat color=grey")
+                icon="close",
+            ).props("flat round dense color=grey").tooltip(
+                "Quitar archivo del proveedor"
+            )
+            provider_remove_button.set_visibility(False)
 
-        with ui.card().classes("w-full p-6 gap-4"):
+        with ui.card().classes("w-full p-6 gap-4") as store_panel:
             ui.label("3. Exportación de WooCommerce").classes(
                 "text-lg font-semibold text-slate-900"
             )
@@ -317,7 +359,6 @@ def build_ui():
             ).classes("text-sm text-slate-600")
             store_details = ui.column().classes("w-full gap-3")
             store_mapping_area = ui.column().classes("w-full gap-3")
-            store_confirmation = ui.column().classes("w-full gap-3")
             store_upload = ui.upload(
                 label="Seleccionar exportación CSV de WooCommerce",
                 auto_upload=True,
@@ -359,13 +400,19 @@ def build_ui():
 
                 state["store"] = confirmed
                 state["store_mode"] = "reference"
+                preparation_status.set_text(
+                    "Comparación completada. Ya podés preparar las altas."
+                )
+                preparation_status.classes(
+                    replace="text-sm text-green-700 font-semibold"
+                )
                 prepare_button.enable()
                 continue_without_store_button.disable()
                 store_confirmation.clear()
                 summary = confirmed["summary"]
                 with store_confirmation:
                     ui.separator()
-                    ui.label("4. Resultado de la comparación").classes(
+                    ui.label("Resultado de la comparación").classes(
                         "text-lg font-semibold text-slate-900"
                     )
                     ui.label(
@@ -408,6 +455,7 @@ def build_ui():
                             "No se detectaron categorías. Revisá si el archivo "
                             "incluye la columna Categories."
                         ).classes("text-sm text-amber-800")
+                workflow_tabs.value = "comparison"
                 ui.notify("Comparación por SKU completada", type="positive")
 
             def render_store_mapping(inspection):
@@ -449,6 +497,8 @@ def build_ui():
                 prepare_button.disable()
                 continue_without_store_button.disable()
                 preparation_results.clear()
+                category_selection_area.clear()
+                export_area.clear()
                 preparation_status.set_text(
                     "Confirmá el mapeo de WooCommerce para usar esta exportación como referencia."
                 )
@@ -456,22 +506,33 @@ def build_ui():
                 store_confirmation.clear()
                 store_details.clear()
                 try:
-                    file_bytes = event.content.read()
+                    # Support both NiceGUI upload event formats.
+                    if hasattr(event, "file"):
+                        file_bytes = await event.file.read()
+                        filename = event.file.name
+                    else:
+                        file_bytes = event.content.read()
+                        filename = event.name
+
                     store_upload.reset()
-                    inspection = inspect_store_file(file_bytes, event.name)
-                except (UnicodeDecodeError, ValueError, TypeError) as exc:
+                    inspection = inspect_store_file(file_bytes, filename)
+                except Exception as exc:
                     state["store_mode"] = "invalid"
                     store_status.set_text(
-                        f"No se pudo interpretar la exportación: {exc}. "
+                        f"No se pudo interpretar la exportación: "
+                        f"{type(exc).__name__}: {exc}. "
                         "La comparación está bloqueada. Reemplazá el archivo o quitálo "
                         "y elegí continuar sin referencia."
                     )
                     store_status.classes(replace="text-sm text-red-700")
                     with store_details:
-                        ui.label(f"Archivo rechazado: {event.name}").classes(
-                            "text-sm font-medium text-slate-800"
-                        )
-                    ui.notify("No se pudo leer la exportación; preparación bloqueada", type="negative")
+                        ui.label(
+                            f"Archivo rechazado: {locals().get('filename', 'WooCommerce')}"
+                        ).classes("text-sm font-medium text-slate-800")
+                    ui.notify(
+                        f"No se pudo procesar la exportación: {type(exc).__name__}",
+                        type="negative",
+                    )
                     return
 
                 state["store_inspection"] = inspection
@@ -524,10 +585,12 @@ def build_ui():
                 preparation_status.set_text(
                     "Referencia WooCommerce omitida explícitamente. Ya podés preparar las altas."
                 )
+                workflow_tabs.value = "comparison"
                 ui.notify("Se continuará sin referencia WooCommerce", type="warning")
 
         def prepare_addition():
             category_selection_area.clear()
+            export_area.clear()
             state["selection_result"] = None
             provider = state["provider"]
             if provider is None:
@@ -663,6 +726,7 @@ def build_ui():
             preparation_status.classes(replace="text-sm text-green-700 font-semibold")
             ui.notify("Clasificación de productos completada", type="positive")
             render_category_selection()
+            workflow_tabs.value = "selection"
 
         def render_category_selection():
             category_selection_area.clear()
@@ -907,6 +971,7 @@ def build_ui():
             state["selection_category_mappings"] = category_mappings
             state["selection_category_limits"] = category_limits
             render_selection_result()
+            workflow_tabs.value = "selection"
             ui.notify("Selección por categoría aplicada", type="positive")
 
         def render_selection_result():
@@ -918,6 +983,7 @@ def build_ui():
 
             mapping = provider["mapping"]
             category_selection_area.clear()
+            export_area.clear()
             with category_selection_area:
                 ui.separator()
                 ui.label("Resultado de la selección").classes(
@@ -1042,6 +1108,7 @@ def build_ui():
                     pagination=20,
                 ).classes("w-full")
 
+            with export_area:
                 if result["export_rows"] and store is not None:
                     export_fields = [
                         "SKU", "Name", "Regular price", "Published", "Type", "Categories"
@@ -1069,7 +1136,11 @@ def build_ui():
 
 
 
-        with ui.card().classes("w-full p-6 gap-4"):
+        with ui.card().classes("w-full p-6 gap-4") as preparation_panel:
+            # Keep the comparison result before the preparation action and its
+            # output so revisiting this tab preserves the workflow chronology.
+            store_confirmation = ui.column().classes("w-full gap-3")
+            ui.separator()
             ui.label("4. Preparación de altas").classes(
                 "text-lg font-semibold text-slate-900"
             )
@@ -1087,8 +1158,36 @@ def build_ui():
             ).props("color=primary")
             prepare_button.disable()
             preparation_results = ui.column().classes("w-full gap-3")
+
+        with ui.card().classes("w-full p-6 gap-4") as selection_panel:
+            ui.label("Selección por categoría").classes("text-lg font-semibold text-slate-900")
+            ui.label(
+                "Configurá las categorías, revisá los destinos y definí los cupos del lote."
+            ).classes("text-sm text-slate-600")
             category_selection_area = ui.column().classes("w-full gap-3")
             category_controls = {}
+
+        with ui.card().classes("w-full p-6 gap-4") as export_panel:
+            ui.label("Exportación de altas").classes("text-lg font-semibold text-slate-900")
+            ui.label(
+                "Descargá el CSV después de revisar los productos seleccionados."
+            ).classes("text-sm text-slate-600")
+            export_area = ui.column().classes("w-full gap-3")
+
+        def update_workflow_tab(event):
+            active_tab = event.value
+            provider_panel.set_visibility(active_tab == "files")
+            store_panel.set_visibility(active_tab == "files")
+            preparation_panel.set_visibility(active_tab == "comparison")
+            selection_panel.set_visibility(active_tab == "selection")
+            export_panel.set_visibility(active_tab == "export")
+
+        workflow_tabs.on_value_change(update_workflow_tab)
+        workflow_tabs.value = "files"
+        store_panel.set_visibility(True)
+        preparation_panel.set_visibility(False)
+        selection_panel.set_visibility(False)
+        export_panel.set_visibility(False)
 
         with ui.row().classes("w-full justify-between items-center"):
             ui.label("MVP · Procesamiento local · Sin escritura en WooCommerce").classes(
