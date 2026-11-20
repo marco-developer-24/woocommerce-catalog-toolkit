@@ -114,3 +114,19 @@ def suggest_destination_categories(source_categories, destination_categories):
             }
 
     return suggestions
+
+
+def is_destination_selection_confirmed(
+    suggestion, selected_destination, confirmed_destination
+):
+    """Validate a selected destination against its suggestion confirmation.
+
+    A suggested destination requires explicit confirmation only while it remains
+    selected. Choosing a different destination is an explicit manual decision.
+    """
+    if suggestion.get("status") != "suggested":
+        return True
+    suggested_destination = suggestion.get("destination")
+    if selected_destination != suggested_destination:
+        return True
+    return confirmed_destination == selected_destination

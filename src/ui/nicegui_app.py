@@ -12,7 +12,10 @@ from src.application.store_setup import (
 )
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_exports import make_dict_rows_csv
-from src.application.woocommerce_categories import suggest_destination_categories
+from src.application.woocommerce_categories import (
+    is_destination_selection_confirmed,
+    suggest_destination_categories,
+)
 from src.application.manual_product_selection import set_manual_product_selection
 from src.operations.add_products import prepare_add_products
 from src.operations.select_products import normalize_category
@@ -758,6 +761,7 @@ def build_ui():
                         ).classes("w-full")
 
                         accept_suggestion = None
+                        accepted_destination = {"value": None}
                         if is_suggested:
                             match_label = (
                                 "Coincidencia exacta de categoría"
@@ -770,6 +774,23 @@ def build_ui():
                             accept_suggestion = ui.checkbox(
                                 "Confirmo esta categoría de destino",
                                 value=False,
+                            )
+
+                            def record_suggestion_confirmation(event):
+                                accepted_destination["value"] = (
+                                    destination.value if event.value else None
+                                )
+
+                            def invalidate_suggestion_confirmation(_):
+                                accepted_destination["value"] = None
+                                if accept_suggestion.value:
+                                    accept_suggestion.set_value(False)
+
+                            accept_suggestion.on_value_change(
+                                record_suggestion_confirmation
+                            )
+                            destination.on_value_change(
+                                invalidate_suggestion_confirmation
                             )
                         elif suggestion["status"] == "ambiguous":
                             ui.label(
@@ -787,7 +808,7 @@ def build_ui():
                             "limit": limit,
                             "destination": destination,
                             "suggestion": suggestion,
-                            "accept_suggestion": accept_suggestion,
+                            "accepted_destination": accepted_destination,
                         }
                     category_panels[key] = panel
 
@@ -828,10 +849,13 @@ def build_ui():
                 category_limits[controls["source"]] = int(raw_limit)
                 destination = controls["destination"].value
                 suggestion = controls["suggestion"]
-                acceptance = controls["accept_suggestion"]
-                if suggestion["status"] == "suggested" and not acceptance.value:
+                if not is_destination_selection_confirmed(
+                    suggestion,
+                    destination,
+                    controls["accepted_destination"]["value"],
+                ):
                     ui.notify(
-                        f"Confirmá la categoría sugerida para {controls['source']}.",
+                        f"Confirmá la categoría sugerida para {controls['source']} o elegí otro destino manualmente.",
                         type="warning",
                     )
                     return

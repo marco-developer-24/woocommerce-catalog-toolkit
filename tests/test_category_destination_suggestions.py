@@ -1,6 +1,9 @@
 import unittest
 
-from src.application.woocommerce_categories import suggest_destination_categories
+from src.application.woocommerce_categories import (
+    is_destination_selection_confirmed,
+    suggest_destination_categories,
+)
 
 
 class CategoryDestinationSuggestionTests(unittest.TestCase):
@@ -32,6 +35,40 @@ class CategoryDestinationSuggestionTests(unittest.TestCase):
     def test_normalizes_case_and_repeated_whitespace(self):
         result = suggest_destination_categories(["  memorias   ram "], ["Componentes > MEMORIAS RAM"])
         self.assertEqual(result["memorias ram"]["destination"], "Componentes > MEMORIAS RAM")
+
+    def test_suggested_destination_requires_confirmation_when_kept(self):
+        suggestion = {"status": "suggested", "destination": "Components > RAM"}
+        self.assertFalse(
+            is_destination_selection_confirmed(
+                suggestion, "Components > RAM", None
+            )
+        )
+
+    def test_confirmed_suggested_destination_is_valid(self):
+        suggestion = {"status": "suggested", "destination": "Components > RAM"}
+        self.assertTrue(
+            is_destination_selection_confirmed(
+                suggestion, "Components > RAM", "Components > RAM"
+            )
+        )
+
+    def test_manual_destination_does_not_require_suggestion_confirmation(self):
+        suggestion = {"status": "suggested", "destination": "Components > RAM"}
+        self.assertTrue(
+            is_destination_selection_confirmed(
+                suggestion, "Hardware > Memory", None
+            )
+        )
+
+    def test_unmatched_or_ambiguous_manual_destination_is_valid(self):
+        for status in ("unmatched", "ambiguous"):
+            with self.subTest(status=status):
+                suggestion = {"status": status, "destination": None}
+                self.assertTrue(
+                    is_destination_selection_confirmed(
+                        suggestion, "Hardware > Memory", None
+                    )
+                )
 
     def test_skips_blank_source_categories(self):
         self.assertEqual(suggest_destination_categories(["", "  "], ["Hardware > RAM"]), {})
