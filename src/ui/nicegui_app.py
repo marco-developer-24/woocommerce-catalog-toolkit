@@ -209,6 +209,7 @@ def build_ui():
                 clear_provider(reset_upload=False)
                 try:
                     file_bytes = event.content.read()
+                    provider_upload.reset()
                     inspection = inspect_provider_file(file_bytes, event.name)
                 except (UnicodeDecodeError, ValueError, TypeError) as exc:
                     provider_status.set_text(
@@ -439,8 +440,10 @@ def build_ui():
                 )
                 store_mapping_area.clear()
                 store_confirmation.clear()
+                store_details.clear()
                 try:
                     file_bytes = event.content.read()
+                    store_upload.reset()
                     inspection = inspect_store_file(file_bytes, event.name)
                 except (UnicodeDecodeError, ValueError, TypeError) as exc:
                     state["store_mode"] = "invalid"
