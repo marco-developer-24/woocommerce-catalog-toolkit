@@ -238,8 +238,8 @@ def build_ui():
             async def handle_provider_upload(event):
                 clear_provider(reset_upload=False)
                 try:
-                    file_bytes = await event.file.read()
-                    inspection = inspect_provider_file(file_bytes, event.file.name)
+                    file_bytes = event.content.read()
+                    inspection = inspect_provider_file(file_bytes, event.name)
                 except (UnicodeDecodeError, ValueError, TypeError) as exc:
                     provider_status.set_text(
                         f"No se pudo interpretar el archivo: {exc}"
