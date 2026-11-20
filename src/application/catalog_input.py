@@ -17,7 +17,7 @@ def _read_csv(file_bytes, delimiter, row_limit=None):
     if not isinstance(file_bytes, bytes):
         raise TypeError("file_bytes must be bytes.")
 
-    text = file_bytes.decode("utf-8-sig")
+    text = file_bytes.decode("utf-8-sig").lstrip("\ufeff")
     reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
     raw_headers = next(reader, None)
     if not raw_headers:
@@ -35,10 +35,14 @@ def _read_csv(file_bytes, delimiter, row_limit=None):
     rows = []
     total_rows = 0
     for row_number, values in enumerate(reader, start=2):
-        if len(values) != len(raw_headers):
+        if len(values) > len(raw_headers):
             raise ValueError(
-                f"El CSV tiene una fila con distinta cantidad de columnas (fila {row_number})."
+                f"El CSV tiene una fila con más columnas que el encabezado "
+                f"(fila {row_number})."
             )
+        if len(values) < len(raw_headers):
+            values.extend([""] * (len(raw_headers) - len(values)))
+
         for position in blank_positions:
             if values[position].strip():
                 raise ValueError(
