@@ -235,83 +235,94 @@ def build_ui():
                         icon="check",
                     ).props("color=primary")
 
-            async def handle_provider_upload(event):
-                clear_provider(reset_upload=False)
+            def handle_provider_upload(event):
+                provider_status.set_text("Archivo recibido. Procesando…")
+                provider_status.classes(
+                    replace="text-sm text-blue-700 font-semibold"
+                )
                 try:
+                    clear_provider(reset_upload=False)
+                    provider_status.set_text("Archivo recibido. Procesando…")
+                    provider_status.classes(
+                        replace="text-sm text-blue-700 font-semibold"
+                    )
                     file_bytes = event.content.read()
                     inspection = inspect_provider_file(file_bytes, event.name)
-                except (UnicodeDecodeError, ValueError, TypeError) as exc:
+
+                    state["provider_inspection"] = inspection
+                    provider_remove_button.set_visibility(True)
+                    provider_status.set_text("Archivo leído correctamente")
+                    provider_status.classes(
+                        replace="text-sm text-green-700 font-semibold"
+                    )
+                    with provider_details:
+                        with ui.row().classes("w-full flex-wrap gap-6"):
+                            values = (
+                                ("ARCHIVO", inspection["filename"]),
+                                ("FILAS", f'{len(inspection["rows"]):,}'),
+                                ("COLUMNAS", str(len(inspection["headers"]))),
+                                (
+                                    "SEPARADOR",
+                                    "Tabulación"
+                                    if inspection["detected_delimiter"] == "\\t"
+                                    else inspection["detected_delimiter"],
+                                ),
+                                ("PERFIL", inspection["profile"]),
+                            )
+                            for label, value in values:
+                                with ui.column().classes("gap-0"):
+                                    ui.label(label).classes(
+                                        "text-xs font-semibold text-slate-500"
+                                    )
+                                    ui.label(value).classes(
+                                        "font-medium text-slate-900"
+                                    )
+                        if inspection["ignored_empty_columns"]:
+                            ui.label(
+                                f' se ignoraron {inspection["ignored_empty_columns"]} '
+                                "columna(s) sin encabezado y completamente vacía(s)."
+                            ).classes("text-sm text-amber-700")
+
+                    with provider_preview:
+                        ui.label("Vista previa · Primeras 5 filas").classes(
+                            "text-base font-semibold text-slate-900"
+                        )
+                        headers = inspection["headers"][:6]
+                        rows = [
+                            {header: row.get(header, "") for header in headers}
+                            for row in inspection["rows"][:PREVIEW_LIMIT]
+                        ]
+                        if rows:
+                            columns = [
+                                {
+                                    "name": header,
+                                    "label": header,
+                                    "field": header,
+                                    "align": "left",
+                                }
+                                for header in headers
+                            ]
+                            ui.table(
+                                columns=columns,
+                                rows=rows,
+                                row_key=headers[0],
+                            ).classes("w-full")
+                        else:
+                            ui.label(
+                                "El CSV contiene encabezados, pero no tiene productos."
+                            ).classes("text-sm text-amber-700")
+                    render_provider_mapping(inspection)
+                    ui.notify("CSV del proveedor inspeccionado", type="positive")
+                except Exception as exc:
                     provider_status.set_text(
-                        f"No se pudo interpretar el archivo: {exc}"
+                        f"Error al procesar el archivo: {type(exc).__name__}: {exc}"
                     )
                     provider_status.classes(replace="text-sm text-red-700")
-                    ui.notify("No se pudo leer el CSV del proveedor", type="negative")
-                    return
-
-                state["provider_inspection"] = inspection
-                provider_remove_button.set_visibility(True)
-                provider_status.set_text("Archivo leído correctamente")
-                provider_status.classes(
-                    replace="text-sm text-green-700 font-semibold"
-                )
-                with provider_details:
-                    with ui.row().classes("w-full flex-wrap gap-6"):
-                        values = (
-                            ("ARCHIVO", inspection["filename"]),
-                            ("FILAS", f'{len(inspection["rows"]):,}'),
-                            ("COLUMNAS", str(len(inspection["headers"]))),
-                            (
-                                "SEPARADOR",
-                                "Tabulación"
-                                if inspection["detected_delimiter"] == "\t"
-                                else inspection["detected_delimiter"],
-                            ),
-                            ("PERFIL", inspection["profile"]),
-                        )
-                        for label, value in values:
-                            with ui.column().classes("gap-0"):
-                                ui.label(label).classes(
-                                    "text-xs font-semibold text-slate-500"
-                                )
-                                ui.label(value).classes(
-                                    "font-medium text-slate-900"
-                                )
-                    if inspection["ignored_empty_columns"]:
-                        ui.label(
-                            f'Se ignoraron {inspection["ignored_empty_columns"]} '
-                            "columna(s) sin encabezado y completamente vacía(s)."
-                        ).classes("text-sm text-amber-700")
-
-                with provider_preview:
-                    ui.label("Vista previa · Primeras 5 filas").classes(
-                        "text-base font-semibold text-slate-900"
+                    ui.notify(
+                        f"Falló el procesamiento del CSV: {type(exc).__name__}",
+                        type="negative",
                     )
-                    headers = inspection["headers"][:6]
-                    rows = [
-                        {header: row.get(header, "") for header in headers}
-                        for row in inspection["rows"][:PREVIEW_LIMIT]
-                    ]
-                    if rows:
-                        columns = [
-                            {
-                                "name": header,
-                                "label": header,
-                                "field": header,
-                                "align": "left",
-                            }
-                            for header in headers
-                        ]
-                        ui.table(
-                            columns=columns,
-                            rows=rows,
-                            row_key=headers[0],
-                        ).classes("w-full")
-                    else:
-                        ui.label(
-                            "El CSV contiene encabezados, pero no tiene productos."
-                        ).classes("text-sm text-amber-700")
-                render_provider_mapping(inspection)
-                ui.notify("CSV del proveedor inspeccionado", type="positive")
+                    raise
 
             provider_upload.on_upload(handle_provider_upload)
             provider_remove_button = ui.button(
