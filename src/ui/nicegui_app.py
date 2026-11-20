@@ -917,7 +917,7 @@ def build_ui():
             state["selection_category_mappings"] = category_mappings
             state["selection_category_limits"] = category_limits
             render_selection_result()
-            workflow_tabs.value = tab_selection
+            workflow_tabs.value = "selection"
             ui.notify("Selección por categoría aplicada", type="positive")
 
         def render_selection_result():
