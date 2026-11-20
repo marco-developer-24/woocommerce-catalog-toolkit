@@ -100,6 +100,8 @@ def build_ui():
                 provider_status.set_text("Esperando un archivo CSV…")
                 provider_status.classes(replace="text-sm text-slate-600")
                 clear_store()
+                store_upload.disable()
+                store_status.set_text("Primero cargá y confirmá el mapeo del proveedor.")
 
             def confirm_provider_mapping():
                 inspection = state["provider_inspection"]
@@ -119,6 +121,9 @@ def build_ui():
 
                 state["provider"] = confirmed
                 clear_store()
+                store_upload.enable()
+                store_status.set_text("Proveedor confirmado. Ya podés cargar la exportación.")
+                store_status.classes(replace="text-sm text-blue-700 font-semibold")
                 provider_confirmation.clear()
                 with provider_confirmation:
                     with ui.card().classes(
@@ -272,6 +277,8 @@ def build_ui():
                 max_file_size=MAX_UPLOAD_BYTES,
                 max_files=1,
             ).props('accept=".csv"').classes("w-full")
+            store_upload.disable()
+            store_status.set_text("Primero cargá y confirmá el mapeo del proveedor.")
 
             def confirm_store_mapping():
                 if state["provider"] is None:
@@ -383,16 +390,6 @@ def build_ui():
                 state["store"] = None
                 store_mapping_area.clear()
                 store_confirmation.clear()
-                if state["provider"] is None:
-                    store_status.set_text(
-                        "Primero confirmá el mapeo del proveedor."
-                    )
-                    store_status.classes(replace="text-sm text-amber-800")
-                    ui.notify(
-                        "Falta confirmar el archivo del proveedor.",
-                        type="warning",
-                    )
-                    return
                 try:
                     file_bytes = event.content.read()
                     inspection = inspect_store_file(file_bytes, event.name)
