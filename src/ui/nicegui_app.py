@@ -46,7 +46,8 @@ def build_ui():
     store_selectors = {}
 
     ui.add_head_html("""<style>
-        .catalog-upload .q-uploader__list { display: none !important; }
+         .catalog-upload .q-uploader__list,
+        .catalog-upload .q-uploader__progress { display: none !important; }
     </style>""")
 
     ui.colors(
@@ -92,7 +93,7 @@ def build_ui():
                     auto_upload=True,
                     max_file_size=MAX_UPLOAD_BYTES,
                     max_files=1,
-                ).props('accept=".csv"').classes("w-full catalog-upload")
+                ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
 
             def clear_store(*, reset_upload=True):
                 if reset_upload:
@@ -318,7 +319,7 @@ def build_ui():
                 auto_upload=True,
                 max_file_size=MAX_UPLOAD_BYTES,
                 max_files=1,
-            ).props('accept=".csv"').classes("w-full catalog-upload")
+            ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
             store_upload.disable()
             continue_without_store_button = ui.button(
                 "Continuar sin exportación WooCommerce",
@@ -679,8 +680,15 @@ def build_ui():
                     categories_by_key.setdefault(key, value)
 
             categories = sorted(categories_by_key.items(), key=lambda item: item[1].casefold())
+            category_counts = {}
+            for row in provider["rows"]:
+                key = normalize_category(row.get(category_column, ""))
+                if key:
+                    category_counts[key] = category_counts.get(key, 0) + 1
+
             store = state["store"]
             destinations = store["observed_categories"] if store else []
+            category_panels = {}
 
             with category_selection_area:
                 ui.separator()
@@ -691,6 +699,18 @@ def build_ui():
                     "Activá las categorías que querés preparar y definí un cupo. "
                     "Dentro de cada categoría se prioriza el menor precio."
                 ).classes("text-sm text-slate-600")
+                with ui.row().classes("w-full items-center justify-between"):
+                    ui.label(f"{len(categories)} categorías · {len(provider['rows']):,} productos").classes(
+                        "text-xs text-slate-500"
+                    )
+                    ui.label("Las categorías están contraídas para facilitar la navegación.").classes(
+                        "text-xs text-slate-500"
+                    )
+                category_filter = ui.input(
+                    label="Buscar categoría",
+                    placeholder="Escribí para filtrar…",
+                ).props("clearable").classes("w-full")
+
                 if not destinations:
                     ui.label(
                         "No hay categorías de destino verificadas. Podés configurar "
@@ -699,15 +719,19 @@ def build_ui():
                     ).classes("text-sm text-amber-800")
 
                 for key, category in categories:
-                    with ui.card().classes("w-full p-3 gap-2"):
+                    with ui.expansion(
+                        f"{category} · {category_counts.get(key, 0):,} productos",
+                        icon="category",
+                        value=False,
+                    ).classes("w-full border border-slate-200 rounded-lg") as panel:
                         with ui.row().classes("w-full items-center gap-3"):
-                            enabled = ui.checkbox(category, value=False)
+                            enabled = ui.checkbox("Incluir categoría", value=False)
                             limit = ui.number(
-                                label="Cupo",
+                                label="Cupo de productos",
                                 value=0,
                                 min=0,
                                 precision=0,
-                            ).classes("w-28")
+                            ).classes("w-40")
                         destination = ui.select(
                             options=destinations,
                             label="Categoría de destino en WooCommerce",
@@ -719,6 +743,18 @@ def build_ui():
                             "limit": limit,
                             "destination": destination,
                         }
+                    category_panels[key] = panel
+
+                def filter_categories(event):
+                    query = normalize_category(event.value)
+                    for key, panel in category_panels.items():
+                        panel.set_visibility(
+                            not query
+                            or query in key
+                            or query in normalize_category(categories_by_key[key])
+                        )
+
+                category_filter.on_value_change(filter_categories)
 
                 ui.button(
                     "Aplicar selección",
@@ -972,7 +1008,7 @@ def build_ui():
             ui.label("MVP · Procesamiento local · Sin escritura en WooCommerce").classes(
                 "text-xs text-slate-500"
             )
-            ui.label("Etapa 3: comparación por SKU").classes(
+            ui.label("Preparación local · Sin escritura en WooCommerce").classes(
                 "text-xs font-medium text-slate-600"
             )
 
