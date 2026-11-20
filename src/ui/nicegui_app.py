@@ -10,6 +10,8 @@ from src.application.store_setup import (
     confirm_store_setup,
     inspect_store_file,
 )
+from src.operations.add_products import prepare_add_products
+from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -30,6 +32,7 @@ def build_ui():
         "provider": None,
         "store_inspection": None,
         "store": None,
+        "preparation": None,
     }
     provider_selectors = {}
     store_selectors = {}
@@ -82,8 +85,14 @@ def build_ui():
             def clear_store():
                 state["store_inspection"] = None
                 state["store"] = None
+                state["preparation"] = None
                 store_selectors.clear()
-                store_status.set_text("Esperando una exportación de WooCommerce…")
+                preparation_results.clear()
+                preparation_status.set_text(
+                    "Podés preparar altas sin exportación de WooCommerce. "
+                    "Si la tienda ya tiene productos, cargarla permite detectar SKU existentes."
+                )
+                store_status.set_text("Exportación de WooCommerce opcional para preparar altas.")
                 store_status.classes(replace="text-sm text-slate-600")
                 store_details.clear()
                 store_mapping_area.clear()
@@ -101,6 +110,7 @@ def build_ui():
                 provider_status.classes(replace="text-sm text-slate-600")
                 clear_store()
                 store_upload.disable()
+                prepare_button.disable()
                 store_status.set_text("Primero cargá y confirmá el mapeo del proveedor.")
 
             def confirm_provider_mapping():
@@ -122,7 +132,10 @@ def build_ui():
                 state["provider"] = confirmed
                 clear_store()
                 store_upload.enable()
-                store_status.set_text("Proveedor confirmado. Ya podés cargar la exportación.")
+                prepare_button.enable()
+                store_status.set_text(
+                    "Proveedor confirmado. Podés cargar WooCommerce o continuar sin ese archivo."
+                )
                 store_status.classes(replace="text-sm text-blue-700 font-semibold")
                 provider_confirmation.clear()
                 with provider_confirmation:
@@ -388,6 +401,11 @@ def build_ui():
             async def handle_store_upload(event):
                 state["store_inspection"] = None
                 state["store"] = None
+                state["preparation"] = None
+                preparation_results.clear()
+                preparation_status.set_text(
+                    "Confirmá el mapeo de WooCommerce para usar esta exportación como referencia."
+                )
                 store_mapping_area.clear()
                 store_confirmation.clear()
                 try:
@@ -437,6 +455,152 @@ def build_ui():
                 on_click=clear_store,
                 icon="delete_outline",
             ).props("flat color=grey")
+
+        def prepare_addition():
+            provider = state["provider"]
+            if provider is None:
+                ui.notify("Primero confirmá el mapeo del proveedor.", type="warning")
+                return
+
+            if state["store_inspection"] is not None and state["store"] is None:
+                ui.notify(
+                    "La exportación de WooCommerce está cargada, pero falta confirmar su mapeo.",
+                    type="warning",
+                )
+                return
+
+            store = state["store"]
+            catalog_rows = store["rows"] if store else []
+            catalog_sku_column = store["mapping"]["sku"] if store else "SKU"
+            mapping = provider["mapping"]
+
+            try:
+                result = prepare_add_products(
+                    provider["rows"],
+                    catalog_rows,
+                    supplier_sku_column=mapping["sku"],
+                    catalog_sku_column=catalog_sku_column,
+                    name_column=mapping["name"],
+                    price_column=mapping["price"],
+                    stock_column=mapping.get("stock"),
+                    require_positive_stock=True,
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                state["preparation"] = None
+                preparation_results.clear()
+                preparation_status.set_text(f"No se pudo preparar el catálogo: {exc}")
+                preparation_status.classes(replace="text-sm text-red-700")
+                ui.notify("Falló la preparación de altas", type="negative")
+                return
+
+            state["preparation"] = result
+            preparation_results.clear()
+            counts = {
+                READY: len(result[READY]),
+                REVIEW: len(result[REVIEW]),
+                BLOCKED: len(result[BLOCKED]),
+                EXCLUDED: len(result[EXCLUDED]),
+            }
+            status_labels = {
+                READY: "Elegible",
+                REVIEW: "En revisión",
+                BLOCKED: "Bloqueado",
+                EXCLUDED: "Ya existe en WooCommerce",
+            }
+            status_styles = {
+                READY: "text-green-700",
+                REVIEW: "text-amber-700",
+                BLOCKED: "text-red-700",
+                EXCLUDED: "text-slate-600",
+            }
+
+            all_items = sorted(
+                (
+                    item
+                    for status in (READY, REVIEW, BLOCKED, EXCLUDED)
+                    for item in result[status]
+                ),
+                key=lambda item: item["row_number"],
+            )
+            rows = []
+            for item in all_items:
+                source = item["row"]
+                rows.append({
+                    "row_number": item["row_number"],
+                    "sku": str(item["sku"] or ""),
+                    "name": str(source.get(mapping["name"], "") or ""),
+                    "price": str(source.get(mapping["price"], "") or ""),
+                    "stock": str(source.get(mapping.get("stock"), "") or "")
+                    if mapping.get("stock") else "No informado",
+                    "status": status_labels[item["status"]],
+                    "reason": item["reason"],
+                })
+
+            with preparation_results:
+                ui.separator()
+                ui.label("Resultado de la preparación").classes(
+                    "text-lg font-semibold text-slate-900"
+                )
+                ui.label(
+                    "Cada fila del proveedor aparece clasificada. En esta etapa "
+                    "todavía no se modifica ni se exporta ningún producto."
+                ).classes("text-sm text-slate-600")
+                with ui.grid(columns=2).classes("w-full gap-3"):
+                    for status in (READY, REVIEW, BLOCKED, EXCLUDED):
+                        with ui.card().classes("p-3 gap-1"):
+                            ui.label(status_labels[status]).classes(
+                                "text-xs text-slate-500"
+                            )
+                            ui.label(f"{counts[status]:,}").classes(
+                                f"text-2xl font-semibold {status_styles[status]}"
+                            )
+                ui.label(
+                    f"Total: {len(all_items):,} filas · "
+                    f"Proveedor: {len(provider['rows']):,} productos · "
+                    f"WooCommerce: {len(catalog_rows):,} productos de referencia"
+                ).classes("text-sm font-medium text-slate-700")
+                if store is None:
+                    ui.label(
+                        "Preparación sin exportación WooCommerce: no se verificó "
+                        "si estos SKU ya existen en la tienda. Los candidatos nuevos "
+                        "son relativos a una referencia vacía."
+                    ).classes("text-sm text-amber-800")
+                columns = [
+                    {"name": "row_number", "label": "Fila", "field": "row_number", "align": "left"},
+                    {"name": "sku", "label": "SKU", "field": "sku", "align": "left"},
+                    {"name": "name", "label": "Producto", "field": "name", "align": "left"},
+                    {"name": "price", "label": "Precio", "field": "price", "align": "left"},
+                    {"name": "stock", "label": "Stock", "field": "stock", "align": "left"},
+                    {"name": "status", "label": "Clasificación", "field": "status", "align": "left"},
+                    {"name": "reason", "label": "Motivo", "field": "reason", "align": "left"},
+                ]
+                ui.table(
+                    columns=columns,
+                    rows=rows,
+                    row_key="row_number",
+                    pagination=20,
+                ).classes("w-full")
+            preparation_status.set_text("Preparación de altas completada.")
+            preparation_status.classes(replace="text-sm text-green-700 font-semibold")
+            ui.notify("Clasificación de productos completada", type="positive")
+
+        with ui.card().classes("w-full p-6 gap-4"):
+            ui.label("4. Preparación de altas").classes(
+                "text-lg font-semibold text-slate-900"
+            )
+            ui.label(
+                "Clasificá todos los productos del proveedor antes de configurar "
+                "selecciones o generar archivos."
+            ).classes("text-sm text-slate-500")
+            preparation_status = ui.label(
+                "Primero cargá y confirmá el mapeo del proveedor."
+            ).classes("text-sm text-slate-600")
+            ui.button(
+                "Preparar altas",
+                on_click=prepare_addition,
+                icon="inventory",
+            ).props("color=primary")
+            preparation_results = ui.column().classes("w-full gap-3")
 
         with ui.row().classes("w-full justify-between items-center"):
             ui.label("MVP · Procesamiento local · Sin escritura en WooCommerce").classes(
