@@ -449,6 +449,7 @@ def build_ui():
                             "No se detectaron categorías. Revisá si el archivo "
                             "incluye la columna Categories."
                         ).classes("text-sm text-amber-800")
+                workflow_tabs.value = "comparison"
                 ui.notify("Comparación por SKU completada", type="positive")
 
             def render_store_mapping(inspection):
@@ -578,6 +579,7 @@ def build_ui():
                 preparation_status.set_text(
                     "Referencia WooCommerce omitida explícitamente. Ya podés preparar las altas."
                 )
+                workflow_tabs.value = "comparison"
                 ui.notify("Se continuará sin referencia WooCommerce", type="warning")
 
         def prepare_addition():
