@@ -793,7 +793,8 @@ def build_ui():
                         ("En revisión", summary["review"]),
                         ("Bloqueados", summary["blocked"]),
                         ("Ya existentes", summary["excluded_existing"]),
-                        ("Fuera del cupo o sin categoría", summary["ready_not_selected"]),
+                        ("No incluidos en el CSV", summary["ready_not_selected"]),
+                        ("Categoría sin destino", summary["unmapped_category"]),
                     ):
                         with ui.card().classes("p-3 gap-1"):
                             ui.label(label).classes("text-xs text-slate-500")
