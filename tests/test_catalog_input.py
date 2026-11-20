@@ -147,9 +147,9 @@ class TestReadCsvPreview(unittest.TestCase):
         self.assertEqual(content, original)
 
     def test_validates_rows_beyond_preview_limit(self):
-        content = "sku,name\n1,A\n2,B\n3\n".encode("utf-8")
+        content = b"sku,name\n1,A\n2,B\n3,C,Unexpected\n"
 
-        with self.assertRaisesRegex(ValueError, "fila 4"):
+        with self.assertRaisesRegex(ValueError, "más columnas.*fila 4"):
             read_csv_preview(content, ",", limit=1)
 
 
