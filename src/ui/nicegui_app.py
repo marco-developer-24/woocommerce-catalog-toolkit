@@ -676,14 +676,13 @@ def build_ui():
 
 
 def run_app():
-    """Start the local NiceGUI application in a desktop webview."""
+    """Start the local NiceGUI application in a browser."""
     build_ui()
     ui.run(
         title="WooCommerce Catalog Toolkit",
-        native=True,
-        window_size=(1280, 860),
+        native=False,
         reload=False,
-        show=False,
+        show=True,
     )
 
 
