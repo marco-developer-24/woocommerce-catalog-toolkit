@@ -64,10 +64,10 @@ def set_manual_product_selection(
             return updated
         if (
             item["status"] != NOT_SELECTED
-            or item["reason_code"] != "CATEGORY_LIMIT_REACHED"
+            or item["reason_code"] not in {"CATEGORY_LIMIT_REACHED", "MANUALLY_EXCLUDED"}
         ):
             raise ValueError(
-                "Only eligible products omitted by the category limit can be included manually."
+                "Only eligible products omitted by the category limit or manually excluded can be included."
             )
 
         destination = category_mappings.get(category_key)
