@@ -724,7 +724,7 @@ def build_ui():
                     ).classes("text-sm text-amber-800")
 
                 for key, category in categories:
-                    suggestion = suggestions.get(key, {
+                    suggestion = suggestions.get(" ".join(key.split()), {
                         "status": "unmatched",
                         "destination": None,
                         "match_type": None,
