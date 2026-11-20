@@ -1131,6 +1131,10 @@ def build_ui():
 
 
         with ui.card().classes("w-full p-6 gap-4") as preparation_panel:
+            # Keep the comparison result before the preparation action and its
+            # output so revisiting this tab preserves the workflow chronology.
+            store_confirmation = ui.column().classes("w-full gap-3")
+            ui.separator()
             ui.label("4. Preparación de altas").classes(
                 "text-lg font-semibold text-slate-900"
             )
@@ -1148,7 +1152,6 @@ def build_ui():
             ).props("color=primary")
             prepare_button.disable()
             preparation_results = ui.column().classes("w-full gap-3")
-            store_confirmation = ui.column().classes("w-full gap-3")
 
         with ui.card().classes("w-full p-6 gap-4") as selection_panel:
             ui.label("Selección por categoría").classes("text-lg font-semibold text-slate-900")
