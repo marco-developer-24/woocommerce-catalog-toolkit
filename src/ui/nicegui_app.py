@@ -50,7 +50,8 @@ def build_ui():
     store_selectors = {}
 
     ui.add_head_html("""<style>
-        .catalog-upload .q-uploader__progress { display: none !important; }
+        .catalog-upload .q-uploader__progress,
+        .catalog-upload .q-uploader__list { display: none !important; }
     </style>""")
 
     ui.colors(
@@ -154,6 +155,7 @@ def build_ui():
                 )
                 provider_mapping_status.classes(replace="text-sm text-slate-500")
                 provider_confirmation.clear()
+                provider_remove_button.set_visibility(False)
                 provider_status.set_text("Esperando un archivo CSV…")
                 provider_status.classes(replace="text-sm text-slate-600")
                 clear_store()
@@ -236,8 +238,8 @@ def build_ui():
             async def handle_provider_upload(event):
                 clear_provider(reset_upload=False)
                 try:
-                    file_bytes = event.content.read()
-                    inspection = inspect_provider_file(file_bytes, event.name)
+                    file_bytes = await event.file.read()
+                    inspection = inspect_provider_file(file_bytes, event.file.name)
                 except (UnicodeDecodeError, ValueError, TypeError) as exc:
                     provider_status.set_text(
                         f"No se pudo interpretar el archivo: {exc}"
@@ -247,6 +249,7 @@ def build_ui():
                     return
 
                 state["provider_inspection"] = inspection
+                provider_remove_button.set_visibility(True)
                 provider_status.set_text("Archivo leído correctamente")
                 provider_status.classes(
                     replace="text-sm text-green-700 font-semibold"
@@ -311,11 +314,14 @@ def build_ui():
                 ui.notify("CSV del proveedor inspeccionado", type="positive")
 
             provider_upload.on_upload(handle_provider_upload)
-            ui.button(
-                "Quitar archivo del proveedor",
+            provider_remove_button = ui.button(
+                "Quitar archivo",
                 on_click=clear_provider,
-                icon="delete_outline",
-            ).props("flat color=grey")
+                icon="close",
+            ).props("flat round dense color=grey").tooltip(
+                "Quitar archivo del proveedor"
+            )
+            provider_remove_button.set_visibility(False)
 
         with ui.card().classes("w-full p-6 gap-4") as store_panel:
             ui.label("3. Exportación de WooCommerce").classes(
