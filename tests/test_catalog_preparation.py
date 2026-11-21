@@ -1,479 +1,120 @@
-
 import unittest
 
 from src.application.catalog_preparation import prepare_catalog
-from src.operations.common import BLOCKED
-from src.operations.select_products import INELIGIBLE, NOT_SELECTED
+from src.application.product_selection import SELECTED, NOT_SELECTED
+from src.operations.common import BLOCKED, READY, REVIEW
 
 
 class CatalogPreparationTests(unittest.TestCase):
     def setUp(self):
         self.supplier_rows = [
-            {
-                "SKU": "NEW-1",
-                "Name": "New product",
-                "Regular price": "100",
-                "Category": "Accessories",
-                "Stock": "10",
-            },
-            {
-                "SKU": "OLD-1",
-                "Name": "Existing product",
-                "Regular price": "200",
-                "Category": "Accessories",
-                "Stock": "5",
-            },
-            {
-                "SKU": "NEW-2",
-                "Name": "Second new product",
-                "Regular price": "150",
-                "Category": "Accessories",
-                "Stock": "8",
-            },
-            {
-                "SKU": "DUP-1",
-                "Name": "Duplicate A",
-                "Regular price": "50",
-                "Category": "Accessories",
-                "Stock": "4",
-            },
-            {
-                "SKU": " dup-1 ",
-                "Name": "Duplicate B",
-                "Regular price": "60",
-                "Category": "Accessories",
-                "Stock": "3",
-            },
+            {"SKU": "NEW-1", "Name": "New product", "Regular price": "100", "Category": "Accessories", "Stock": "10"},
+            {"SKU": "OLD-1", "Name": "Existing product", "Regular price": "200", "Category": "Accessories", "Stock": "5"},
+            {"SKU": "NEW-2", "Name": "Second new product", "Regular price": "150", "Category": "Accessories", "Stock": "8"},
+            {"SKU": "DUP-1", "Name": "Duplicate A", "Regular price": "50", "Category": "Accessories", "Stock": "4"},
+            {"SKU": " dup-1 ", "Name": "Duplicate B", "Regular price": "60", "Category": "Accessories", "Stock": "3"},
         ]
-
-        self.catalog_rows = [
-            {"SKU": "OLD-1"},
-        ]
-
-        self.selection_config = {
+        self.catalog_rows = [{"SKU": "OLD-1"}]
+        self.config = {
             "category_column": "Category",
-            "price_column": "Regular price",
-            "category_limits": {"Accessories": 3},
             "stock_column": "Stock",
-        }
-
-        self.supplier_columns = {
-            "sku": "SKU",
-            "name": "Name",
-            "price": "Regular price",
-        }
-
-    def test_exports_only_selected_unique_new_products_ready_for_addition(self):
-        result = prepare_catalog(
-            self.supplier_rows,
-            self.catalog_rows,
-            selection_config=self.selection_config,
-            supplier_columns=self.supplier_columns,
-        )
-
-        exported_skus = [row["SKU"] for row in result["export_rows"]]
-
-        self.assertEqual(exported_skus, ["NEW-1", "NEW-2"])
-
-    def test_existing_products_are_not_exported(self):
-        result = prepare_catalog(
-            self.supplier_rows,
-            self.catalog_rows,
-            selection_config=self.selection_config,
-            supplier_columns=self.supplier_columns,
-        )
-
-        exported_skus = [row["SKU"] for row in result["export_rows"]]
-
-        self.assertNotIn("OLD-1", exported_skus)
-
-    def test_duplicate_supplier_skus_are_not_exported(self):
-        result = prepare_catalog(
-            self.supplier_rows,
-            self.catalog_rows,
-            selection_config=self.selection_config,
-            supplier_columns=self.supplier_columns,
-        )
-
-        exported_skus = [row["SKU"] for row in result["export_rows"]]
-
-        self.assertNotIn("DUP-1", exported_skus)
-        self.assertNotIn(" dup-1 ", exported_skus)
-
-    def test_preserves_original_supplier_row_numbers(self):
-        result = prepare_catalog(
-            self.supplier_rows,
-            self.catalog_rows,
-            selection_config=self.selection_config,
-            supplier_columns=self.supplier_columns,
-        )
-
-        exported_rows = result["export_items"]
-
-        self.assertEqual(
-            [item["row_number"] for item in exported_rows],
-            [2, 4],
-        )
-
-    def test_does_not_mutate_input_rows(self):
-        original_supplier = [dict(row) for row in self.supplier_rows]
-        original_catalog = [dict(row) for row in self.catalog_rows]
-
-        prepare_catalog(
-            self.supplier_rows,
-            self.catalog_rows,
-            selection_config=self.selection_config,
-            supplier_columns=self.supplier_columns,
-        )
-
-        self.assertEqual(self.supplier_rows, original_supplier)
-        self.assertEqual(self.catalog_rows, original_catalog)
-
-    def _prepare(
-        self,
-        *,
-        supplier_rows=None,
-        catalog_rows=None,
-        selection_config=None,
-        supplier_columns=None,
-    ):
-        return prepare_catalog(
-            self.supplier_rows if supplier_rows is None else supplier_rows,
-            self.catalog_rows if catalog_rows is None else catalog_rows,
-            selection_config=(
-                self.selection_config
-                if selection_config is None
-                else selection_config
-            ),
-            supplier_columns=(
-                self.supplier_columns
-                if supplier_columns is None
-                else supplier_columns
-            ),
-        )
-
-    def test_zero_category_limit_exports_nothing(self):
-        selection_config = {
-            **self.selection_config,
-            "category_limits": {"Accessories": 0},
-        }
-
-        result = self._prepare(selection_config=selection_config)
-
-        self.assertEqual(result["export_rows"], [])
-        self.assertEqual(result["export_items"], [])
-        self.assertEqual(result["summary"]["new_ready"], 2)
-        self.assertEqual(result["summary"]["exported"], 0)
-        self.assertEqual(
-            [item["status"] for item in result["selection"]["items"]],
-            [NOT_SELECTED, NOT_SELECTED],
-        )
-        self.assertEqual(
-            [item["reason_code"] for item in result["selection"]["items"]],
-            ["CATEGORY_LIMIT_REACHED", "CATEGORY_LIMIT_REACHED"],
-        )
-
-    def test_minimum_stock_excludes_products_below_threshold(self):
-        selection_config = {
-            **self.selection_config,
-            "stock_column": "Stock",
-            "minimum_stock": 9,
-        }
-
-        result = self._prepare(selection_config=selection_config)
-
-        self.assertEqual(
-            [row["SKU"] for row in result["export_rows"]],
-            ["NEW-1"],
-        )
-        self.assertEqual(
-            [item["row_number"] for item in result["export_items"]],
-            [2],
-        )
-        below_minimum = next(
-            item
-            for item in result["selection"]["items"]
-            if item["row"]["SKU"] == "NEW-2"
-        )
-        self.assertEqual(below_minimum["status"], INELIGIBLE)
-        self.assertEqual(below_minimum["reason_code"], "STOCK_BELOW_MINIMUM")
-
-    def test_unenabled_category_is_not_exported(self):
-        selection_config = {
-            **self.selection_config,
-            "category_limits": {"Electronics": 2},
-        }
-
-        result = self._prepare(selection_config=selection_config)
-
-        self.assertEqual(result["export_rows"], [])
-        self.assertEqual(
-            [item["status"] for item in result["selection"]["items"]],
-            [NOT_SELECTED, NOT_SELECTED],
-        )
-        self.assertEqual(
-            [item["reason_code"] for item in result["selection"]["items"]],
-            ["CATEGORY_NOT_ENABLED", "CATEGORY_NOT_ENABLED"],
-        )
-
-    def test_invalid_selection_price_is_not_exported(self):
-        supplier_rows = [
-            {
-                "SKU": "NEW-3",
-                "Name": "Invalid selection price",
-                "Regular price": "10",
-                "Selection price": "not-a-number",
-                "Stock": "5",
-                "Category": "Accessories",
-            }
-        ]
-        selection_config = {
-            **self.selection_config,
-            "price_column": "Selection price",
-        }
-
-        result = self._prepare(
-            supplier_rows=supplier_rows,
-            selection_config=selection_config,
-        )
-
-        self.assertEqual(result["export_rows"], [])
-        self.assertEqual(len(result["selection"]["items"]), 1)
-        self.assertEqual(result["selection"]["items"][0]["status"], INELIGIBLE)
-        self.assertEqual(
-            result["selection"]["items"][0]["reason_code"],
-            "INVALID_PRICE",
-        )
-
-    def test_invalid_supplier_price_is_blocked_and_not_exported(self):
-        supplier_rows = [
-            {
-                "SKU": "BAD-PRICE",
-                "Name": "Bad price",
-                "Regular price": "12,50",
-                "Category": "Accessories",
-                "Stock": "5",
-            }
-        ]
-
-        result = self._prepare(supplier_rows=supplier_rows)
-
-        self.assertEqual(result["export_rows"], [])
-        self.assertEqual(
-            [item["sku"] for item in result["add_products"][BLOCKED]],
-            ["BAD-PRICE"],
-        )
-
-    def test_confirmed_category_mapping_is_included_in_export(self):
-        selection_config = {
-            **self.selection_config,
             "category_mappings": {"accessories": "Hardware > Accessories"},
-            "require_category_mapping": True,
         }
-        result = self._prepare(selection_config=selection_config)
+        self.columns = {"sku": "SKU", "name": "Name", "price": "Regular price"}
 
-        self.assertEqual(
-            [row["Categories"] for row in result["export_rows"]],
-            ["Hardware > Accessories", "Hardware > Accessories"],
+    def prepare(self, *, rows=None, state=None, config=None, catalog=None):
+        return prepare_catalog(
+            self.supplier_rows if rows is None else rows,
+            self.catalog_rows if catalog is None else catalog,
+            selection_config=self.config if config is None else config,
+            supplier_columns=self.columns,
+            selection_state=state,
         )
 
-    def test_selected_products_without_category_mapping_are_not_exported(self):
-        selection_config = {
-            **self.selection_config,
-            "category_mappings": {},
-            "require_category_mapping": True,
-        }
-        result = self._prepare(selection_config=selection_config)
-
+    def test_all_products_start_not_selected_and_nothing_exports(self):
+        result = self.prepare()
+        self.assertTrue(all(value == NOT_SELECTED for value in result["selection_state"].values()))
         self.assertEqual(result["export_rows"], [])
-        self.assertEqual(result["summary"]["unmapped_category"], 2)
-        self.assertEqual(
-            [item["reason_code"] for item in result["selection"]["items"]],
-            ["CATEGORY_NOT_MAPPED", "CATEGORY_NOT_MAPPED"],
+        self.assertEqual(result["summary"]["new_ready"], 2)
+
+    def test_exports_only_selected_ready_products_with_confirmed_destination(self):
+        result = self.prepare(state={2: SELECTED, 4: SELECTED})
+        self.assertEqual([row["SKU"] for row in result["export_rows"]], ["NEW-1", "NEW-2"])
+        self.assertEqual([item["row_number"] for item in result["export_items"]], [2, 4])
+        self.assertEqual([row["Categories"] for row in result["export_rows"]], ["Hardware > Accessories"] * 2)
+
+    def test_existing_and_duplicate_skus_never_export(self):
+        result = self.prepare(state={2: SELECTED, 3: SELECTED, 4: SELECTED, 5: SELECTED, 6: SELECTED})
+        exported = [row["SKU"] for row in result["export_rows"]]
+        self.assertEqual(exported, ["NEW-1", "NEW-2"])
+        self.assertNotIn("OLD-1", exported)
+        self.assertNotIn("DUP-1", exported)
+
+    def test_selection_without_destination_is_retained_but_not_exported(self):
+        result = self.prepare(
+            state={2: SELECTED},
+            config={**self.config, "category_mappings": {}},
         )
+        self.assertEqual(result["selection_state"][2], SELECTED)
+        self.assertEqual(result["export_rows"], [])
+        self.assertEqual(result["summary"]["selected_without_destination"], 1)
 
-    def test_export_rows_match_export_items_changes(self):
-        result = self._prepare()
+    def test_destination_does_not_select_products(self):
+        result = self.prepare(config={**self.config, "category_mappings": {"accessories": "Hardware > Accessories"}})
+        self.assertEqual(result["selection_state"][2], NOT_SELECTED)
+        self.assertEqual(result["export_rows"], [])
 
-        self.assertEqual(len(result["export_items"]), len(result["export_rows"]))
-        for item, row in zip(result["export_items"], result["export_rows"]):
-            with self.subTest(sku=row["SKU"]):
-                self.assertEqual(row, item["changes"])
-                self.assertIsNot(row, item["changes"])
-                self.assertEqual(row["SKU"], item["sku"])
-                self.assertEqual(row["Published"], "-1")
-                self.assertEqual(row["Type"], "simple")
+    def test_rows_that_are_no_longer_ready_are_reset_to_not_selected(self):
+        result = self.prepare(state={2: SELECTED, 3: SELECTED, 4: SELECTED})
+        self.assertEqual(result["selection_state"][3], NOT_SELECTED)
+        self.assertEqual(result["selection_state"][5], NOT_SELECTED)
+        self.assertEqual(result["selection_state"][6], NOT_SELECTED)
 
-    def test_selection_preserves_original_supplier_row_numbers(self):
-        result = self._prepare()
+    def test_rejects_selection_rows_outside_current_supplier_session(self):
+        with self.assertRaisesRegex(ValueError, "outside the current supplier session"):
+            self.prepare(state={99: SELECTED})
 
-        self.assertEqual(
-            [item["row_number"] for item in result["selection"]["items"]],
-            [2, 4],
-        )
+    def test_rejects_invalid_selection_status(self):
+        with self.assertRaisesRegex(ValueError, "invalid selection"):
+            self.prepare(state={2: "MAYBE"})
+
+    def test_minimum_stock_review_status_is_not_selectable(self):
+        rows = [{"SKU": "LOW", "Name": "Low stock", "Regular price": "10", "Category": "Accessories", "Stock": "0"}]
+        result = self.prepare(rows=rows, state={2: SELECTED})
+        self.assertEqual(result["add_products"][REVIEW][0]["sku"], "LOW")
+        self.assertEqual(result["selection_state"][2], NOT_SELECTED)
+        self.assertEqual(result["export_rows"], [])
+
+    def test_invalid_supplier_price_is_blocked(self):
+        rows = [{"SKU": "BAD", "Name": "Bad price", "Regular price": "12,50", "Category": "Accessories", "Stock": "5"}]
+        result = self.prepare(rows=rows, state={2: SELECTED})
+        self.assertEqual([item["sku"] for item in result["add_products"][BLOCKED]], ["BAD"])
+        self.assertEqual(result["selection_state"][2], NOT_SELECTED)
+
+    def test_does_not_mutate_input_rows_or_selection_state(self):
+        original_rows = [dict(row) for row in self.supplier_rows]
+        state = {2: SELECTED}
+        original_state = dict(state)
+        self.prepare(state=state)
+        self.assertEqual(self.supplier_rows, original_rows)
+        self.assertEqual(state, original_state)
+
+    def test_export_preserves_woocommerce_add_format(self):
+        result = self.prepare(state={2: SELECTED})
+        row = result["export_rows"][0]
+        self.assertEqual(row["Published"], "-1")
+        self.assertEqual(row["Type"], "simple")
+        self.assertEqual(row["Regular price"], "100")
+
 
 class CatalogPreparationValidationTests(unittest.TestCase):
-    def setUp(self):
-        self.supplier_rows = [
-            {
-                "SKU": "NEW-1",
-                "Name": "New product",
-                "Regular price": "10",
-                "Category": "Accessories",
-                "Stock": "5",
-            }
-        ]
-        self.catalog_rows = []
-        self.selection_config = {
-            "category_column": "Category",
-            "price_column": "Regular price",
-            "category_limits": {"Accessories": 1},
-        }
-        self.supplier_columns = {
-            "sku": "SKU",
-            "name": "Name",
-            "price": "Regular price",
-        }
+    def test_requires_category_column(self):
+        with self.assertRaisesRegex(ValueError, "category_column"):
+            prepare_catalog([], [], selection_config={}, supplier_columns={"sku": "SKU", "name": "Name", "price": "Price"})
 
-    def _prepare(self, *, selection_config=None, supplier_columns=None):
-        return prepare_catalog(
-            self.supplier_rows,
-            self.catalog_rows,
-            selection_config=(
-                self.selection_config
-                if selection_config is None
-                else selection_config
-            ),
-            supplier_columns=(
-                self.supplier_columns
-                if supplier_columns is None
-                else supplier_columns
-            ),
-        )
-
-    def test_rejects_incomplete_selection_config(self):
-        for key in ("category_column", "price_column", "category_limits"):
-            with self.subTest(key=key):
-                selection_config = dict(self.selection_config)
-                del selection_config[key]
-
-                with self.assertRaisesRegex(ValueError, key):
-                    self._prepare(selection_config=selection_config)
-
-    def test_rejects_incomplete_supplier_columns(self):
-        for key in ("sku", "name", "price"):
-            with self.subTest(key=key):
-                supplier_columns = dict(self.supplier_columns)
-                del supplier_columns[key]
-
-                with self.assertRaisesRegex(ValueError, key):
-                    self._prepare(supplier_columns=supplier_columns)
-
-    def test_rejects_non_dictionary_configurations(self):
-        with self.assertRaisesRegex(TypeError, "selection_config"):
-            prepare_catalog(
-                self.supplier_rows,
-                self.catalog_rows,
-                selection_config=[],
-                supplier_columns=self.supplier_columns,
-            )
-
-        with self.assertRaisesRegex(TypeError, "supplier_columns"):
-            prepare_catalog(
-                self.supplier_rows,
-                self.catalog_rows,
-                selection_config=self.selection_config,
-                supplier_columns=[],
-            )
-
-    def test_rejects_blank_required_columns(self):
-        for key in ("category_column", "price_column"):
-            with self.subTest(key=key):
-                selection_config = {**self.selection_config, key: "  "}
-
-                with self.assertRaisesRegex(ValueError, key):
-                    self._prepare(selection_config=selection_config)
-
-        for key in ("sku", "name", "price"):
-            with self.subTest(key=key):
-                supplier_columns = {**self.supplier_columns, key: ""}
-
-                with self.assertRaisesRegex(ValueError, key):
-                    self._prepare(supplier_columns=supplier_columns)
-
-    def test_rejects_invalid_stock_column_when_provided(self):
-        for value in ("", "  ", 123, False):
-            with self.subTest(value=value):
-                selection_config = {
-                    **self.selection_config,
-                    "stock_column": value,
-                }
-
-                with self.assertRaisesRegex(ValueError, "stock_column"):
-                    self._prepare(selection_config=selection_config)
-
-    def test_allows_none_stock_column(self):
-        selection_config = {
-            **self.selection_config,
-            "stock_column": None,
-        }
-
-        result = self._prepare(selection_config=selection_config)
-
-        self.assertEqual(result["export_rows"], [])
-        self.assertEqual(len(result["add_products"]["REVIEW"]), 1)
-        self.assertIn(
-            "No supplier stock column",
-            result["add_products"]["REVIEW"][0]["reason"],
-        )
-
-    def test_rejects_non_dictionary_category_limits(self):
-        for value in (None, [], "Accessories", 3):
-            with self.subTest(value=value):
-                selection_config = {
-                    **self.selection_config,
-                    "category_limits": value,
-                }
-
-                with self.assertRaisesRegex(ValueError, "category_limits"):
-                    self._prepare(selection_config=selection_config)
-
-    def test_delegates_invalid_category_limit_values_to_selection(self):
-        for limits in (
-            {"Accessories": -1},
-            {"Accessories": 1.5},
-            {"Accessories": True},
-            {"Accessories": "1"},
-        ):
-            with self.subTest(limits=limits):
-                selection_config = {
-                    **self.selection_config,
-                    "category_limits": limits,
-                }
-
-                with self.assertRaisesRegex(ValueError, "limit"):
-                    self._prepare(selection_config=selection_config)
-
-    def test_minimum_stock_requires_stock_column(self):
-        selection_config = {
-            **self.selection_config,
-            "minimum_stock": 1,
-        }
-
-        with self.assertRaisesRegex(ValueError, "minimum_stock"):
-            self._prepare(selection_config=selection_config)
-
-    def test_delegates_invalid_minimum_stock_values_to_selection(self):
-        for value in (-1, "invalid", float("inf")):
-            with self.subTest(value=value):
-                selection_config = {
-                    **self.selection_config,
-                    "stock_column": "Stock",
-                    "minimum_stock": value,
-                }
-
-                with self.assertRaisesRegex(ValueError, "minimum_stock"):
-                    self._prepare(selection_config=selection_config)
+    def test_requires_supplier_columns(self):
+        with self.assertRaisesRegex(ValueError, "price"):
+            prepare_catalog([], [], selection_config={"category_column": "Category"}, supplier_columns={"sku": "SKU", "name": "Name"})
 
 
 if __name__ == "__main__":
