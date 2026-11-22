@@ -852,6 +852,7 @@ def build_ui():
                         ).classes("w-full")
 
                         accepted_destination = {"value": confirmed_value}
+                        accepted_control = {"value": None}
                         if suggestion["status"] == "suggested":
                             match_label = (
                                 "Coincidencia exacta de ruta"
@@ -865,6 +866,7 @@ def build_ui():
                                 "Confirmo el destino sugerido",
                                 value=confirmed_value == suggested_destination,
                             )
+                            accepted_control["value"] = accepted
                             def on_accept_suggestion(
                                 event, category_key=key,
                                 accepted_state=accepted_destination,
@@ -899,10 +901,13 @@ def build_ui():
                             event, category_key=key,
                             suggestion_data=suggestion,
                             accepted_state=accepted_destination,
+                            confirmation_control=accepted_control,
                         ):
                             selected_destination = event.value
                             state["selection_confirmations"].pop(category_key, None)
                             accepted_state["value"] = None
+                            if confirmation_control["value"] is not None:
+                                confirmation_control["value"].set_value(False)
                             if selected_destination:
                                 if (
                                     suggestion_data["status"] != "suggested"
