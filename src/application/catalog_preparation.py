@@ -131,17 +131,14 @@ def prepare_catalog(
         export_items.append(item)
         export_rows.append(row)
 
+    operation_items_by_row = {
+        item["row_number"]: item
+        for status in (READY, REVIEW, BLOCKED, EXCLUDED)
+        for item in addition[status]
+    }
     selection_items = []
     for row_number, row in enumerate(supplier_rows, start=2):
-        operation_item = next(
-            (
-                item
-                for status in (READY, REVIEW, BLOCKED, EXCLUDED)
-                for item in addition[status]
-                if item["row_number"] == row_number
-            ),
-            None,
-        )
+        operation_item = operation_items_by_row.get(row_number)
         status = operation_item["status"] if operation_item else BLOCKED
         category = row.get(category_column, "")
         selection_items.append({
