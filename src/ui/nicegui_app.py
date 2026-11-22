@@ -539,9 +539,6 @@ def build_ui():
         def prepare_addition():
             category_selection_area.clear()
             state["selection_result"] = None
-            state["selection_state"] = {}
-            state["selection_category_mappings"] = {}
-            state["selection_confirmations"] = {}
             provider = state["provider"]
             if provider is None:
                 ui.notify("Primero confirmá el mapeo del proveedor.", type="warning")
@@ -823,10 +820,6 @@ def build_ui():
                         item["row_number"]: item
                         for item in result["selection"]["items"]
                     }
-                    selected_in_category = sum(
-                        1 for product in category_products
-                        if result["selection_state"].get(product["row_number"]) == "SELECTED"
-                    )
                     suggestion = suggestions.get(key, {
                         "status": "unmatched",
                         "destination": None,
@@ -839,8 +832,7 @@ def build_ui():
                         destination_value = suggested_destination
 
                     with ui.expansion(
-                        f"{category} · {len(category_products):,} productos · "
-                        f"{selected_in_category:,} seleccionados",
+                        f"{category} · {len(category_products):,} productos",
                         icon="category",
                         value=False,
                     ).classes("w-full border border-slate-200 rounded-lg") as panel:
