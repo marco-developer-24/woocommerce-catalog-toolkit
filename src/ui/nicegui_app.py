@@ -150,6 +150,8 @@ def build_ui():
                     store_selectors.clear()
                     preparation_results.clear()
                     category_selection_area.clear()
+                    comparison_summary_area.clear()
+                    export_area.clear()
                     prepare_button.disable()
                     continue_to_selection_button.disable()
                     if state["provider"] is not None:
@@ -494,9 +496,12 @@ def build_ui():
                     state["selection_category_mappings"] = {}
                     state["selection_confirmations"] = {}
                     prepare_button.disable()
+                    continue_to_selection_button.disable()
                     continue_without_store_button.disable()
                     preparation_results.clear()
                     category_selection_area.clear()
+                    comparison_summary_area.clear()
+                    export_area.clear()
                     preparation_status.set_text(
                         "Confirmá el mapeo de WooCommerce para usar esta exportación como referencia."
                     )
