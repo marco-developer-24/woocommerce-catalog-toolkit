@@ -452,9 +452,13 @@ def build_ui():
                 state["store"] = None
                 state["store_mode"] = "reading"
                 state["preparation"] = None
+                state["selection_result"] = None
+                state["selection_category_mappings"] = {}
+                state["selection_confirmations"] = {}
                 prepare_button.disable()
                 continue_without_store_button.disable()
                 preparation_results.clear()
+                category_selection_area.clear()
                 preparation_status.set_text(
                     "Confirmá el mapeo de WooCommerce para usar esta exportación como referencia."
                 )
