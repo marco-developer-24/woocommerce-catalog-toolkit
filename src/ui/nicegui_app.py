@@ -789,6 +789,15 @@ def build_ui():
                 summary_labels["review"].set_text(f'{summary["review"]:,}')
                 summary_labels["blocked"].set_text(f'{summary["blocked"]:,}')
                 summary_labels["existing"].set_text(f'{summary["excluded_existing"]:,}')
+                for category_key, count_label in category_count_labels.items():
+                    selected_count = sum(
+                        1 for product in products_by_category[category_key]
+                        if state["selection_state"].get(product["row_number"]) == "SELECTED"
+                    )
+                    count_label.set_text(
+                        f'{len(products_by_category[category_key]):,} productos · '
+                        f'{selected_count:,} seleccionados'
+                    )
                 update_export_area(result)
 
             def update_export_area(result):
@@ -866,7 +875,9 @@ def build_ui():
                     ).classes("text-sm text-amber-800")
 
                 category_panels = {}
+                category_expansions = {}
                 category_product_rows = {}
+                category_count_labels = {}
                 with ui.element("div").classes(
                     "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 w-full"
                 ):
@@ -889,9 +900,14 @@ def build_ui():
 
                         with ui.card().classes("w-full min-w-0 p-3 gap-2") as category_card:
                             ui.label(category).classes("font-semibold text-slate-900")
-                            ui.label(f"{len(category_products):,} productos").classes(
-                                "text-xs text-slate-500"
+                            selected_in_category = sum(
+                                1 for product in category_products
+                                if state["selection_state"].get(product["row_number"]) == "SELECTED"
                             )
+                            category_count_labels[key] = ui.label(
+                                f"{len(category_products):,} productos · "
+                                f"{selected_in_category:,} seleccionados"
+                            ).classes("text-xs text-slate-500")
                                 with ui.expansion(
                                     "Ver productos y configurar destino",
                                 icon="category",
@@ -1065,11 +1081,24 @@ def build_ui():
                                         row = product["row"]
                                         sku = str(row.get(mapping["sku"], "") or "Sin SKU")
                                         name = str(row.get(mapping["name"], "") or "Sin nombre")
-                                        ui.label(
-                                            f'{item["technical_status"]} · {name} · {sku} · {item["reason"]}'
-                                        ).classes("text-xs text-slate-500")
+                                        with ui.row().classes(
+                                            "w-full items-start justify-between gap-3 py-2 border-b border-slate-100"
+                                        ) as product_row_ui:
+                                            with ui.column().classes("min-w-0 flex-grow gap-0"):
+                                                ui.label(name).classes("text-sm text-slate-700")
+                                                ui.label(f"SKU: {sku}").classes("text-xs text-slate-500")
+                                                ui.label(
+                                                    f'{item["technical_status"]} · {item["reason"]}'
+                                                ).classes("text-xs text-slate-500")
+                                            ui.label(format_catalog_price(
+                                                str(row.get(mapping["price"], "") or "")
+                                            )).classes("text-sm text-slate-500 whitespace-nowrap")
+                                        category_product_rows.setdefault(key, []).append((
+                                            normalize_category(f"{name} {sku}"), product_row_ui
+                                        ))
     
                         category_panels[key] = category_card
+                        category_expansions[key] = panel
 
                 def filter_categories(event):
                     query = normalize_category(event.value)
@@ -1086,6 +1115,8 @@ def build_ui():
                             product_row.set_visibility(visible)
                             matching_products += int(visible)
                         panel.set_visibility(category_matches or matching_products > 0)
+                        if query and not category_matches and matching_products:
+                            category_expansions[key].set_value(True)
 
                 category_filter.on_value_change(filter_categories)
                 update_export_area(result)
