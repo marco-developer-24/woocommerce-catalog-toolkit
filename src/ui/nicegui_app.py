@@ -114,8 +114,8 @@ def build_ui():
             )
 
         with ui.column() as files_panel:
-                with ui.card().classes("w-full p-6 gap-4"):
-                    ui.label("1. Archivo del proveedor").classes(
+            with ui.card().classes("w-full p-6 gap-4"):
+                ui.label("1. Archivo del proveedor").classes(
                     "text-lg font-semibold text-slate-900"
                 )
                 ui.label(
