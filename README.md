@@ -2,328 +2,157 @@
 
 # WooCommerce Catalog Toolkit
 
-**Local CSV validation, catalog comparison, and controlled product preparation for WooCommerce.**
+**Local catalog preparation for WooCommerce: inspect supplier data, compare SKUs, select products, and review a controlled CSV export.**
 
-<img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
-<img src="https://img.shields.io/badge/Interface-NiceGUI-2563EB?logo=python&logoColor=white" alt="NiceGUI desktop interface" />
-<img src="https://img.shields.io/badge/Status-Early%20development-64748B" alt="Early development" />
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Interface](https://img.shields.io/badge/Interface-NiceGUI-2563EB)
+![Processing](https://img.shields.io/badge/Processing-Local-15803d)
+![Store access](https://img.shields.io/badge/WooCommerce-No%20direct%20writes-64748b)
 
 </div>
 
-Small Python utilities for auditing supplier catalog data and preparing controlled product-data changes for WooCommerce review.
+WooCommerce Catalog Toolkit is a local Python application for preparing **new product listings** from a supplier CSV. It helps inspect source data, map columns, compare supplier SKUs against a WooCommerce product export, classify rows, select products manually, map supplier categories to observed WooCommerce categories, and generate a CSV for review.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
-![Input](https://img.shields.io/badge/Input-CSV-3B82C4)
-![Status](https://img.shields.io/badge/Status-Early%20development-64748)
+The application does not connect to a WooCommerce store, write to its database, or import products. The generated file must be reviewed and imported separately through WooCommerce.
 
----
+## What the application does
 
-## Contents
+The current NiceGUI workflow is organized into four stages:
 
-- [Choose the right tool](#choose-the-right-tool)
-- [Recommended catalog-preparation workflow](#recommended-catalog-preparation-workflow)
-- [Image URL Auditor](#tool-1-image-url-auditor)
-- [Catalog CSV Validator](#tool-2-catalog-csv-validator)
-- [New-product preflight](#tool-3-new-product-preflight)
-- [Catalog Update Planner](#tool-4-catalog-update-planner)
-- [Catalog Preparation and Category Selection](#tool-5-catalog-preparation-and-category-selection)
-- [Local graphical interface](#local-graphical-interface-first-version)
-- [Requirements](#requirements)
-- [Tests](#tests)
-- [Project status](#project-status)
-- [License](#license)
+1. **Files**: load a supplier CSV and, optionally, a WooCommerce product export.
+2. **Validation and comparison**: confirm column mappings, compare SKUs, and classify supplier rows for new-product preparation.
+3. **Product selection**: review supplier categories, configure WooCommerce destination categories, and select eligible products individually.
+4. **Review and export**: inspect the exportable selection and download a WooCommerce CSV for new products.
 
-## Choose the right tool
+### Selection rules
 
-| If you need to... | Use | What you get |
-|---|---|---|
-| Check whether supplier image URLs respond as expected | Image URL Auditor | A CSV with per-URL response details and an aggregate summary |
-| Find data-quality issues in a supplier catalog | Catalog CSV Validator | Validation issues and a summary before import |
-| Identify SKUs that may be new compared with a store export | New-product preflight | Candidate, review, and full-report CSV files |
-| Compare supplier prices or stock with a store export | Catalog Update Planner | A review report of detected differences |
-| Prepare a limited set of new products by category | Catalog Preparation | Selected product rows and classification/selection details |
-| Inspect a supplier CSV through the desktop interface | NiceGUI interface | Local file upload, structure inspection, and a five-row preview |
+- Products start **unselected**. The operator chooses products individually.
+- There are no automatic category quotas or category-level bulk selection.
+- Initial product ordering is by ascending supplier price; price does not decide which products are selected.
+- Only technically eligible products can be selected.
+- Selection is preserved while searching, sorting, or opening and closing categories during the session.
+- Supplier category and WooCommerce destination are separate concepts. A suggested destination must be confirmed; changing a destination invalidates its previous confirmation.
+- A product is exportable only when it is selected, technically eligible, and its destination category is confirmed.
 
-These tools address separate preparation tasks. The image auditor checks URL responses; it does not inspect image contents. The validator checks catalog fields; it does not determine whether a product already exists. SKU preflight is a screening aid, not proof that a product is new. Catalog Preparation combines new-product classification with category-based selection. The application services are independent of the graphical interface. The current NiceGUI screen provides supplier-file inspection; the remaining guided workflow is still under development.
+### Product classification
 
-## Recommended catalog-preparation workflow
+Supplier rows are classified before commercial selection:
 
-For a supplier file that may contain products to add to an existing store:
+- **Ready**: required data and SKU checks pass for a potential new product.
+- **Review**: a value needs human review before it can be used.
+- **Blocked**: required data is invalid or insufficient.
+- **Existing**: the SKU was found in the supplied WooCommerce export and is excluded from new-product preparation.
 
-1. **Preserve the source.** Keep the supplier's original file unchanged and work with a copy.
-2. **Inspect and validate the data.** Confirm the delimiter and column mapping. Run the Catalog CSV Validator and resolve errors before moving forward. Review warnings as well.
-3. **Compare against a current catalog export.** Use a recent WooCommerce product export. New-product classification depends on the accuracy and freshness of that snapshot.
-4. **Configure category selection.** Enable only the categories required for the current catalog batch and set a product limit for each category.
-5. **Review the result.** Check excluded existing SKUs, blocked rows, selected products, and eligible products left outside category limits. Review the reasons and source row numbers.
-6. **Prepare the next step separately.** The current preparation output contains a limited set of product fields. It is not a universal WooCommerce import file; confirm field mapping and add any required attributes, images, categories, tax, shipping, or variation data before import.
-7. **Test cautiously.** Back up the store, test a small batch on staging when possible, and verify the importer mapping and resulting products before processing the full batch.
-8. **Check image URLs when needed.** Run the Image URL Auditor against the relevant image URL column. A successful HTTP response does not guarantee that the file is a valid or suitable product image.
+The WooCommerce CSV is a snapshot, not a live connection or necessarily a complete inventory of every category or product in the store. Its freshness and completeness affect comparison quality.
 
-The toolkit prepares and reviews data locally. It does not connect to a store or perform the import.
+## Run locally
 
-## Tool 1: Image URL Auditor
+Python 3.10 or newer is required.
 
-Checks image URLs listed in a CSV and reports HTTP status, content type, server-reported length when available, response time, and error details.
+From the repository root:
 
-It checks response headers; it does not verify the actual image contents.
-
-### Run the auditor
-
-```bash
-python src/image_url_auditor.py \
-  --input supplier_images.csv \
-  --output image_audit.csv \
-  --delimiter ";" \
-  --summary-output image_audit_summary.txt
-```
-
-The CSV report keeps the configured SKU, product-name, and image-URL columns and appends the per-URL audit fields. The console always displays an aggregate summary with counts for `OK`, `CHECK`, `HTTP_ERROR`, `CONNECTION_ERROR`, `INVALID_URL`, and `UNKNOWN`, plus the success rate. Unexpected or unrecognized result values are grouped under `UNKNOWN`, so the result counts always add up to the total number of audited URLs.
-
-The optional `--summary-output` writes the same aggregate summary to a separate plain-text file. Existing output files are never overwritten. The success rate is the percentage of audited URLs classified as `OK`; a `CHECK` response is not counted as a valid image. The CSV report is published before the optional text summary, so a summary-publication error can leave the CSV report available even when the command exits with an error.
-
-## Tool 2: Catalog CSV Validator
-
-Validates supplier catalog files before any import or update. It runs offline, does not connect to WooCommerce, and never modifies the input file.
-
-### Current checks
-
-- Required SKU, product name, and price columns.
-- Empty SKUs and product names (errors).
-- Duplicate SKUs (case-insensitive, ignoring surrounding whitespace).
-- Non-numeric, non-finite, or negative prices (errors).
-- Invalid, fractional, or negative stock values (warnings).
-- Missing required headers, duplicate headers, and malformed row widths.
-
-Supplier column names can be mapped through function arguments.
-
-### Python example
-
-```python
-from src.catalog_csv_validator import validate_catalog_csv
-from src.catalog_csv_report import build_catalog_report, export_issues_csv
-
-issues = validate_catalog_csv(
-    "supplier_catalog.csv",
-    delimiter=",",
-    sku_column="ProductCode",
-    name_column="Description",
-    price_column="NetPrice",
-    stock_column="Available",
-)
-
-summary = build_catalog_report(total_products=120, issues=issues)
-print(summary)
-
-export_issues_csv(issues, "catalog_issues.csv")
-```
-
-The validator can also generate a summary and export detected issues to a CSV report.
-
-## Tool 3: New-product preflight
-
-Compares a supplier CSV with a current WooCommerce catalog CSV export and separates:
-
-- **New candidates**: a nonblank SKU appears exactly once in the supplier file and was not found in the catalog snapshot.
-- **Review required**: SKU already exists, repeats in the supplier file, or is blank.
-- **Full report**: every supplier row with its classification and reason.
-
-### Scope and limitations
-
-The preflight tool is a screening step only. It does not connect to WordPress, map arbitrary supplier columns into WooCommerce's import schema, or import, update, delete, or publish products.
-
-Different SKUs can still describe the same product, and an outdated catalog export can produce false new candidates. Human review remains mandatory.
-
-### Example
-
-Export the current WooCommerce catalog using WooCommerce's native product exporter. Keep the supplier original unchanged and work on a CSV copy.
-
-```bash
-python src/new_product_preflight.py \
-  --supplier examples/supplier_products.csv \
-  --catalog examples/existing_catalog.csv \
-  --output-dir output/preflight-001
-```
-
-When supplier and catalog headers or delimiters differ:
-
-```bash
-python src/new_product_preflight.py \
-  --supplier supplier.csv \
-  --catalog catalog-export.csv \
-  --supplier-sku-column "Código" \
-  --catalog-sku-column "SKU" \
-  --supplier-delimiter "," \
-  --catalog-delimiter ";" \
-  --output-dir output/preflight-002
-```
-
-The output directory must be new or empty. The tool refuses to overwrite files in a non-empty directory. The summary records SHA-256 hashes of the exact input bytes parsed, the UTC execution time, Python version, SKU columns, delimiters, and supplier row count.
-
-### Output files
-
-- `new_products.csv` — candidate rows, retaining supplier columns and values.
-- `review_products.csv` — rows needing review, with `_PREFLIGHT_ROW`, `_PREFLIGHT_STATUS`, and `_PREFLIGHT_REASON`.
-- `preflight_report.csv` — all supplier rows with the same review metadata.
-- `summary.txt` — row counts, safety notes, execution details, input SHA-256 hashes, and the SKU/delimiter configuration used.
-
-### Safe import procedure
-
-1. Back up the store and export the current catalog immediately before preparing the import.
-2. Keep the original supplier workbook unchanged; do all work on copies.
-3. Run preflight and manually review the candidate and review files.
-4. Resolve possible duplicates that use different SKUs by checking product name, barcode/GTIN, brand, and relevant attributes. The tool does not do fuzzy matching.
-5. Map the approved fields to WooCommerce's native product CSV schema; preflight output is **not yet a WooCommerce-ready import file**.
-6. Test a very small batch on staging when available, or during a controlled maintenance window after a backup.
-7. In the native importer, leave the option to update existing products disabled for a new-only run. Review field mapping before starting.
-8. Check importer results, products created, SKUs, images, prices, stock, categories, variations, and existing products after import.
-
-Do not interpret "new candidate" as a guarantee that the product is new. This tool never guarantees that an import cannot affect existing data.
-
-## Tool 4: Catalog Update Planner
-
-Compares supplier values with a WooCommerce catalog export for products whose SKU appears exactly once in both files. It creates a review report; it does not connect to WooCommerce or update products.
-
-### What it classifies
-
-- `UPDATE_REQUIRED`: at least one configured value differs.
-- `NO_CHANGE`: all configured values match.
-- `NEW_CANDIDATE`: the supplier SKU is not present in the catalog snapshot.
-- `REVIEW_REQUIRED`: blank or duplicate SKUs, invalid numeric values, or blank supplier values that must not clear existing data.
-
-Price and stock comparisons are optional, but each comparison requires a supplier and catalog column. Numeric comparison uses decimal values, so `100` and `100.00` are treated as equal. Values must use a plain numeric format; the tool does not guess decimal or thousands separators from locale-specific formats. Stock must be a non-negative whole number.
-
-### Example
-
-Compare supplier price and stock against a WooCommerce CSV export:
-
-```bash
-python src/catalog_update_planner.py \
-  --supplier supplier.csv \
-  --catalog catalog-export.csv \
-  --output output/catalog-update-plan.csv \
-  --supplier-price-column "Precio" \
-  --catalog-price-column "Regular price" \
-  --supplier-stock-column "Existencia" \
-  --catalog-stock-column "Stock quantity"
-```
-
-Use `--supplier-delimiter` and `--catalog-delimiter` when the files use different separators. SKU columns can be mapped independently with `--supplier-sku-column` and `--catalog-sku-column`.
-
-The output preserves supplier columns and appends the supplier row, matched catalog row, planner status, changed fields, and review reason. Existing output files are never overwritten.
-
-**Safety boundary:** this is a planning report, not an import file. Review every proposed change, verify that the catalog export is current, map approved values to WooCommerce's native importer, and test a small batch on staging. Blank supplier values are never treated as instructions to clear existing price or stock values.
-
-## Tool 5: Catalog Preparation and Category Selection
-
-The application layer includes a workflow that combines new-product classification with category-based commercial selection.
-
-It performs the steps in this order:
-
-1. Compare supplier SKUs with the supplied WooCommerce catalog snapshot.
-2. Exclude products whose SKUs already exist.
-3. Block rows with missing or ambiguous SKUs, missing names, or invalid prices.
-4. Apply category selection only to rows classified as ready to add.
-5. Return selected product rows and summaries for review.
-
-This order matters: existing products and blocked rows do not consume category limits.
-
-### Selection rules currently implemented
-
-- Categories are matched after trimming surrounding whitespace and applying case-insensitive normalization.
-- Matching is exact after normalization; fuzzy matching and accent normalization are not implemented.
-- Each configured category has an integer product limit, or `None` for no limit.
-- Eligible products are ordered by ascending non-negative price within each category.
-- Ties are resolved by original supplier row number.
-- An optional stock column and minimum stock can exclude products with invalid or insufficient stock.
-- Results preserve original supplier order and include row numbers, statuses, reason codes, and category positions.
-
-The current selection rule is therefore **lowest price within each enabled category**, not a general-purpose or automated "best product" recommendation.
-
-### Python application example
-
-```python
-from src.application.catalog_preparation import prepare_catalog
-
-result = prepare_catalog(
-    supplier_rows,
-    catalog_rows,
-    selection_config={
-        "category_column": "CATEGORIA",
-        "price_column": "PRECIO",
-        "category_limits": {
-            "NOTEBOOKS": 5,
-            "PC ARMADAS": 3,
-            "MEMORIAS RAM": 4,
-        },
-        # Optional:
-        # "stock_column": "STOCK",
-        # "minimum_stock": 1,
-    },
-    supplier_columns={
-        "sku": "CODIGO",
-        "name": "DETALLE",
-        "price": "PRECIO",
-        "catalog_sku": "SKU",
-    },
-)
-
-print(result["summary"])
-selected_rows = result["export_rows"]
-selection_details = result["selection"]
-```
-
-The example assumes that `supplier_rows` and `catalog_rows` have already been loaded as row dictionaries. Column names must match the actual input headers.
-
-### Result and safety boundary
-
-The workflow returns:
-
-- `export_rows`: selected rows prepared with the current limited field set: SKU, Name, Regular price, Published (0), and Type (simple).
-- `export_items`: selected operation items with their original supplier row context.
-- `selection`: per-row selection status, reason, source row number, and per-category counts.
-- `add_products`: the underlying new-product classification result.
-- `summary`: counts for supplier rows, catalog rows, new ready rows, exported rows, existing products excluded, blocked rows, review rows, and ready rows not selected.
-
-This is a preparation result, not a complete WooCommerce import contract. It does not currently map images, categories, attributes, tax, shipping, variations, or arbitrary supplier fields. It does not connect to WooCommerce, import, update, delete, or publish products. Selected products are explicitly prepared as unpublished simple products (`Published=0`, `Type=simple`).
-
-**Interface availability:** category-based catalog preparation is available through the application services. The current NiceGUI screen does not yet expose this workflow.
-
-## Local graphical interface (first version)
-
-The repository includes an optional NiceGUI desktop interface. Its first screen accepts a supplier CSV, inspects its structure, and displays a preview of the first five rows. The remaining guided workflow, including column mapping, store comparison, category selection, and export, is not yet exposed in the new interface.
-
-The interface runs locally and does not connect to WordPress or WooCommerce. The first screen only reads the selected supplier file and displays an inspection summary and preview. It does not yet prepare or export products, and source files remain unchanged.
-
-### Run the interface
-
-Python 3.10+ is required.
-
-```bash
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-ui.txt
 python app.py
 ```
 
-The application opens a desktop window through NiceGUI's native webview mode. The first version accepts UTF-8 CSV files (with or without BOM) up to 50 MB.
+If PowerShell activation is restricted, invoke the virtual environment's interpreter directly:
 
-The NiceGUI and desktop-webview dependencies are kept separate from the core toolkit. CLI users and automated tests do not need to install them.
-
-## Requirements
-
-- Python 3.10+
-- No third-party Python packages required for the core Python modules
-- CSV inputs in UTF-8 or UTF-8 with BOM
-
-## Tests
-
-```bash
-python -m unittest discover -s tests -p "test_*.py" -v
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-ui.txt
+.\.venv\Scripts\python.exe app.py
 ```
 
-Tests should not need live external websites; image URL tests use mocked HTTP responses.
+The interface runs locally in a browser. The optional UI dependencies are separate from the core Python modules.
+
+## Input files
+
+### Supplier CSV
+
+- UTF-8 or UTF-8 with BOM.
+- Maximum upload size: 50 MB.
+- The application inspects the delimiter and suggests a supplier profile and column mappings.
+- Review the suggested SKU, product name, category, price, and optional stock columns before confirming.
+
+### WooCommerce product export
+
+Export products from **WooCommerce → Products → Export**.
+
+- The export is used as a reference for SKU comparison and observed destination categories.
+- Confirm the SKU column and, where available, the category column.
+- If the store export is omitted, the application can continue only after the omission is explicit. Existing SKUs cannot then be checked, and destination categories cannot be verified from that file.
+- An export is a snapshot. Re-export close to the time of the eventual import to reduce the risk of stale comparisons.
+
+## Export and operational safety
+
+The current export is intended for **new simple products**. It does not implement a general-purpose WooCommerce update workflow.
+
+Before importing:
+
+1. Keep the original supplier file unchanged.
+2. Review all rows classified as ready, review, blocked, or existing.
+3. Confirm every selected product and its destination category.
+4. Inspect the generated CSV and verify its columns and values against the target store.
+5. Back up the store and preferably test a small batch on a staging site.
+6. In WooCommerce's native importer, verify the field mapping and ensure the option to update existing products is disabled for a new-products-only import.
+7. Check the import results, SKUs, prices, stock, categories, images, and product publication status.
+
+**The toolkit does not guarantee that an external WooCommerce import is risk-free.** The operator remains responsible for reviewing the file, importer settings, and results.
+
+## Current scope and limitations
+
+Included:
+
+- Local supplier CSV inspection and column mapping.
+- WooCommerce CSV inspection and SKU comparison.
+- New-product technical classification.
+- Manual, per-product selection.
+- Category destination suggestions and explicit confirmation.
+- Review summaries and CSV export for eligible selected products.
+- Automated unit tests for core processing and selection logic.
+
+Not currently included:
+
+- Direct WooCommerce API access or database writes.
+- Importing products into a store.
+- Product update CSV workflow.
+- Automatic category-wide selection, quotas, or price-based selection.
+- Variations and a complete mapping of all WooCommerce product fields.
+- Automatic creation of WooCommerce categories.
+- Persistent sessions or selection state across application restarts.
+
+## Core Python tools
+
+The repository also contains standalone CSV utilities:
+
+| Tool | Purpose |
+|---|---|
+| Image URL Auditor | Checks HTTP responses for image URLs listed in a CSV. It does not inspect image contents. |
+| Catalog CSV Validator | Detects common supplier CSV data-quality issues. |
+| New-product preflight | Screens supplier SKUs against a catalog export and reports candidate and review rows. |
+| Catalog Update Planner | Produces a review report of supplier price/stock differences. It does not update products. |
+
+These utilities are separate from the current four-stage NiceGUI new-product workflow.
+
+## Run tests
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
+```
+
+The core test suite should not require a live WooCommerce store.
+
+## Dependencies
+
+- Python 3.10+
+- Core CSV utilities use the Python standard library.
+- NiceGUI and pywebview are installed separately through `requirements-ui.txt`.
 
 ## Project status
 
-Early development. The toolkit contains local CSV validation, comparison, and category-based preparation logic. The NiceGUI interface currently exposes only supplier CSV inspection and preview. Store comparison, category selection, product selection, export, and usability testing remain pending.
+The guided local workflow for **new product preparation** is implemented. The next development priorities are documentation and workflow verification, then a separately specified product-update workflow. Treat this project as an evolving preparation tool, not as a direct store-management or import automation system.
 
 ## License
 
