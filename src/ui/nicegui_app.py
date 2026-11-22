@@ -166,7 +166,7 @@ def build_ui():
                     store_status.classes(replace="text-sm text-slate-600")
                     store_details.clear()
                     store_mapping_area.clear()
-                    store_confirmation.clear()
+                    comparison_summary_area.clear()
 
                 def clear_provider(*, reset_upload=True):
                     if reset_upload:
@@ -361,7 +361,6 @@ def build_ui():
                 ).classes("text-sm text-slate-600")
                 store_details = ui.column().classes("w-full gap-3")
                 store_mapping_area = ui.column().classes("w-full gap-3")
-                store_confirmation = ui.column().classes("w-full gap-3")
                 store_upload = ui.upload(
                     label="Seleccionar exportación CSV de WooCommerce",
                     auto_upload=True,
@@ -397,7 +396,7 @@ def build_ui():
                         )
                     except (TypeError, ValueError) as exc:
                         state["store"] = None
-                        store_confirmation.clear()
+                        comparison_summary_area.clear()
                         ui.notify(str(exc), type="negative")
                         return
 
@@ -405,9 +404,9 @@ def build_ui():
                     state["store_mode"] = "reference"
                     prepare_button.enable()
                     continue_without_store_button.disable()
-                    store_confirmation.clear()
+                    comparison_summary_area.clear()
                     summary = confirmed["summary"]
-                    with store_confirmation:
+                    with comparison_summary_area:
                         ui.separator()
                         ui.label("4. Resultado de la comparación").classes(
                             "text-lg font-semibold text-slate-900"
@@ -453,11 +452,12 @@ def build_ui():
                                 "incluye la columna Categories."
                             ).classes("text-sm text-amber-800")
                     ui.notify("Comparación por SKU completada", type="positive")
+                    go_to_step("validation")
 
                 def render_store_mapping(inspection):
                     store_selectors.clear()
                     store_mapping_area.clear()
-                    store_confirmation.clear()
+                    comparison_summary_area.clear()
                     with store_mapping_area:
                         ui.separator()
                         ui.label("Mapeo de columnas de WooCommerce").classes(
@@ -501,7 +501,7 @@ def build_ui():
                         "Confirmá el mapeo de WooCommerce para usar esta exportación como referencia."
                     )
                     store_mapping_area.clear()
-                    store_confirmation.clear()
+                    comparison_summary_area.clear()
                     store_details.clear()
                     try:
                         file_bytes = event.content.read()
@@ -573,6 +573,7 @@ def build_ui():
                         "Referencia WooCommerce omitida explícitamente. Ya podés preparar las altas."
                     )
                     ui.notify("Se continuará sin referencia WooCommerce", type="warning")
+                    go_to_step("validation")
 
         def prepare_addition():
             category_selection_area.clear()
@@ -1091,6 +1092,7 @@ def build_ui():
                     "Revisamos SKU, datos obligatorios, precio y stock. "
                     "Esta etapa no selecciona ni publica productos."
                 ).classes("text-sm text-slate-600")
+                comparison_summary_area = ui.column().classes("w-full gap-3")
                 preparation_status = ui.label(
                     "Cargá los archivos y confirmá sus columnas para comenzar."
                 ).classes("text-sm text-slate-600")
