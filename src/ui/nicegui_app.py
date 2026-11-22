@@ -887,184 +887,189 @@ def build_ui():
                         if destination_value not in destinations:
                             destination_value = suggested_destination
 
-                        with ui.expansion(
-                            f"{category} · {len(category_products):,} productos",
-                            icon="category",
-                            value=False,
-                        ).classes("w-full border border-slate-200 rounded-lg") as panel:
-                            destination = ui.select(
-                                options=destinations,
-                                value=destination_value,
-                                label="Categoría de destino en WooCommerce",
-                                clearable=True,
-                            ).classes("w-full")
-
-                            accepted_destination = {"value": confirmed_value}
-                            accepted_control = {"value": None}
-                            if suggestion["status"] == "suggested":
-                                match_label = (
-                                    "Coincidencia exacta de ruta"
-                                    if suggestion["match_type"] == "exact_path"
-                                    else "Coincidencia única por nombre"
-                                )
-                                ui.label(
-                                    f"Sugerencia: {suggested_destination} · {match_label}"
-                                ).classes("text-sm text-blue-700")
-                                accepted = ui.checkbox(
-                                    "Confirmo el destino sugerido",
-                                    value=confirmed_value == suggested_destination,
-                                )
-                                accepted_control["value"] = accepted
-                                def on_accept_suggestion(
-                                    event, category_key=key,
-                                    accepted_state=accepted_destination,
-                                    destination_selector=destination,
-                                ):
-                                    value = (
-                                        destination_selector.value
-                                        if event.value else None
+                        with ui.card().classes("w-full min-w-0 p-3 gap-2") as category_card:
+                            ui.label(category).classes("font-semibold text-slate-900")
+                            ui.label(f"{len(category_products):,} productos").classes(
+                                "text-xs text-slate-500"
+                            )
+                                with ui.expansion(
+                                    "Ver productos y configurar destino",
+                                icon="category",
+                                value=False,
+                            ).classes("w-full border border-slate-200 rounded-lg") as panel:
+                                destination = ui.select(
+                                    options=destinations,
+                                    value=destination_value,
+                                    label="Categoría de destino en WooCommerce",
+                                    clearable=True,
+                                ).classes("w-full")
+    
+                                accepted_destination = {"value": confirmed_value}
+                                accepted_control = {"value": None}
+                                if suggestion["status"] == "suggested":
+                                    match_label = (
+                                        "Coincidencia exacta de ruta"
+                                        if suggestion["match_type"] == "exact_path"
+                                        else "Coincidencia única por nombre"
                                     )
-                                    accepted_state["value"] = value
-                                    if value:
-                                        state["selection_confirmations"][category_key] = value
-                                        state["selection_category_mappings"][category_key] = value
+                                    ui.label(
+                                        f"Sugerencia: {suggested_destination} · {match_label}"
+                                    ).classes("text-sm text-blue-700")
+                                    accepted = ui.checkbox(
+                                        "Confirmo el destino sugerido",
+                                        value=confirmed_value == suggested_destination,
+                                    )
+                                    accepted_control["value"] = accepted
+                                    def on_accept_suggestion(
+                                        event, category_key=key,
+                                        accepted_state=accepted_destination,
+                                        destination_selector=destination,
+                                    ):
+                                        value = (
+                                            destination_selector.value
+                                            if event.value else None
+                                        )
+                                        accepted_state["value"] = value
+                                        if value:
+                                            state["selection_confirmations"][category_key] = value
+                                            state["selection_category_mappings"][category_key] = value
+                                        else:
+                                            state["selection_confirmations"].pop(category_key, None)
+                                            state["selection_category_mappings"].pop(category_key, None)
+                                        refresh_result()
+    
+                                    accepted.on_value_change(on_accept_suggestion)
+                                elif suggestion["status"] == "ambiguous":
+                                    ui.label(
+                                        "Hay varias coincidencias posibles. Elegí el destino "
+                                        "correcto manualmente."
+                                    ).classes("text-sm text-amber-800")
+                                else:
+                                    ui.label(
+                                        "No hay una sugerencia confiable. Elegí el destino "
+                                        "manualmente."
+                                    ).classes("text-sm text-amber-800")
+    
+                                def on_destination_change(
+                                    event, category_key=key,
+                                    suggestion_data=suggestion,
+                                    accepted_state=accepted_destination,
+                                    confirmation_control=accepted_control,
+                                ):
+                                    selected_destination = event.value
+                                    state["selection_confirmations"].pop(category_key, None)
+                                    accepted_state["value"] = None
+                                    if confirmation_control["value"] is not None:
+                                        confirmation_control["value"].set_value(False)
+                                    if selected_destination:
+                                        if (
+                                            suggestion_data["status"] != "suggested"
+                                            or selected_destination != suggestion_data["destination"]
+                                        ):
+                                            state["selection_category_mappings"][category_key] = selected_destination
+                                        else:
+                                            state["selection_category_mappings"].pop(category_key, None)
                                     else:
-                                        state["selection_confirmations"].pop(category_key, None)
                                         state["selection_category_mappings"].pop(category_key, None)
                                     refresh_result()
-
-                                accepted.on_value_change(on_accept_suggestion)
-                            elif suggestion["status"] == "ambiguous":
-                                ui.label(
-                                    "Hay varias coincidencias posibles. Elegí el destino "
-                                    "correcto manualmente."
-                                ).classes("text-sm text-amber-800")
-                            else:
-                                ui.label(
-                                    "No hay una sugerencia confiable. Elegí el destino "
-                                    "manualmente."
-                                ).classes("text-sm text-amber-800")
-
-                            def on_destination_change(
-                                event, category_key=key,
-                                suggestion_data=suggestion,
-                                accepted_state=accepted_destination,
-                                confirmation_control=accepted_control,
-                            ):
-                                selected_destination = event.value
-                                state["selection_confirmations"].pop(category_key, None)
-                                accepted_state["value"] = None
-                                if confirmation_control["value"] is not None:
-                                    confirmation_control["value"].set_value(False)
-                                if selected_destination:
-                                    if (
-                                        suggestion_data["status"] != "suggested"
-                                        or selected_destination != suggestion_data["destination"]
-                                    ):
-                                        state["selection_category_mappings"][category_key] = selected_destination
-                                    else:
-                                        state["selection_category_mappings"].pop(category_key, None)
-                                else:
-                                    state["selection_category_mappings"].pop(category_key, None)
-                                refresh_result()
-
-                            destination.on_value_change(on_destination_change)
-                            category_controls[key] = {
-                                "destination": destination,
-                                "suggestion": suggestion,
-                            }
-
-                            ui.separator()
-                            eligible_products = []
-                            other_products = []
-                            for product in category_products:
-                                item = category_items[product["row_number"]]
-                                if item["technical_status"] == READY:
-                                    eligible_products.append((product, item))
-                                else:
-                                    other_products.append((product, item))
-
-                            def price_sort_value(pair):
-                                raw = str(pair[0]["row"].get(mapping["price"], "") or "")
-                                normalized = raw.strip().replace(" ", "")
-                                if "," in normalized and "." in normalized:
-                                    normalized = normalized.replace(".", "").replace(",", ".")
-                                elif "," in normalized:
-                                    normalized = normalized.replace(",", ".")
-                                try:
-                                    return (0, Decimal(normalized))
-                                except (InvalidOperation, ValueError):
-                                    return (1, Decimal("0"))
-
-                            eligible_products.sort(key=price_sort_value)
-                            if eligible_products:
-                                ui.label(
-                                    f"Productos elegibles · {len(eligible_products):,}"
-                                ).classes("text-sm font-semibold text-slate-700")
-                                for product, item in eligible_products:
-                                    row = product["row"]
-                                    row_number = product["row_number"]
-                                    sku = str(row.get(mapping["sku"], "") or "Sin SKU")
-                                    name = str(row.get(mapping["name"], "") or "Sin nombre")
-                                    price = str(row.get(mapping["price"], "") or "Sin precio")
-                                    selected = state["selection_state"].get(row_number) == "SELECTED"
-                                    with ui.row().classes(
-                                        "w-full items-center justify-between gap-3 py-2 border-b border-slate-100"
-                                    ) as product_row_ui:
-                                        with ui.column().classes("min-w-0 flex-grow gap-0"):
-                                            checkbox = ui.checkbox(
-                                                name,
-                                                value=selected,
-                                            ).classes("font-medium")
-                                            ui.label(f"SKU: {sku}").classes(
-                                                "text-xs text-slate-500 pl-7"
-                                            )
-                                        ui.label(format_catalog_price(price)).classes(
-                                            "font-semibold text-slate-800 whitespace-nowrap"
-                                        )
-                                        def on_product_selection(
-                                            event, source_row=row_number
-                                        ):
-                                            eligible_rows = {
-                                                candidate["row_number"]
-                                                for status in (READY,)
-                                                for candidate in state["selection_result"]["add_products"][status]
-                                            }
-                                            try:
-                                                state["selection_state"] = set_product_selection(
-                                                    state["selection_state"],
-                                                    source_row,
-                                                    selected=bool(event.value),
-                                                    eligible_row_numbers=eligible_rows,
-                                                )
-                                            except (KeyError, TypeError, ValueError) as exc:
-                                                ui.notify(str(exc), type="warning")
-                                                return
-                                            refresh_result()
-
-                                        checkbox.on_value_change(on_product_selection)
-                                        category_product_rows.setdefault(key, []).append((
-                                            normalize_category(f"{name} {sku}"), product_row_ui
-                                        ))
-                            else:
-                                ui.label(
-                                    "No hay productos técnicamente elegibles en esta categoría."
-                                ).classes("text-sm text-slate-500")
-
-                            if other_products:
+    
+                                destination.on_value_change(on_destination_change)
+                                category_controls[key] = {
+                                    "destination": destination,
+                                    "suggestion": suggestion,
+                                }
+    
                                 ui.separator()
-                                ui.label(
-                                    f"No seleccionables · {len(other_products):,}"
-                                ).classes("text-sm font-semibold text-slate-500")
-                                for product, item in other_products:
-                                    row = product["row"]
-                                    sku = str(row.get(mapping["sku"], "") or "Sin SKU")
-                                    name = str(row.get(mapping["name"], "") or "Sin nombre")
+                                eligible_products = []
+                                other_products = []
+                                for product in category_products:
+                                    item = category_items[product["row_number"]]
+                                    if item["technical_status"] == READY:
+                                        eligible_products.append((product, item))
+                                    else:
+                                        other_products.append((product, item))
+    
+                                def price_sort_value(pair):
+                                    raw = str(pair[0]["row"].get(mapping["price"], "") or "")
+                                    normalized = raw.strip().replace(" ", "")
+                                    if "," in normalized and "." in normalized:
+                                        normalized = normalized.replace(".", "").replace(",", ".")
+                                    elif "," in normalized:
+                                        normalized = normalized.replace(",", ".")
+                                    try:
+                                        return (0, Decimal(normalized))
+                                    except (InvalidOperation, ValueError):
+                                        return (1, Decimal("0"))
+    
+                                eligible_products.sort(key=price_sort_value)
+                                if eligible_products:
                                     ui.label(
-                                        f'{item["technical_status"]} · {name} · {sku} · {item["reason"]}'
-                                    ).classes("text-xs text-slate-500")
-
-                        category_panels[key] = panel
+                                        f"Productos elegibles · {len(eligible_products):,}"
+                                    ).classes("text-sm font-semibold text-slate-700")
+                                    for product, item in eligible_products:
+                                        row = product["row"]
+                                        row_number = product["row_number"]
+                                        sku = str(row.get(mapping["sku"], "") or "Sin SKU")
+                                        name = str(row.get(mapping["name"], "") or "Sin nombre")
+                                        price = str(row.get(mapping["price"], "") or "Sin precio")
+                                        selected = state["selection_state"].get(row_number) == "SELECTED"
+                                        with ui.row().classes(
+                                            "w-full items-center justify-between gap-3 py-2 border-b border-slate-100"
+                                        ) as product_row_ui:
+                                            with ui.column().classes("min-w-0 flex-grow gap-0"):
+                                                checkbox = ui.checkbox(
+                                                    name,
+                                                    value=selected,
+                                                ).classes("font-medium")
+                                                ui.label(f"SKU: {sku}").classes(
+                                                    "text-xs text-slate-500 pl-7"
+                                                )
+                                            ui.label(format_catalog_price(price)).classes(
+                                                "font-semibold text-slate-800 whitespace-nowrap"
+                                            )
+                                            def on_product_selection(
+                                                event, source_row=row_number
+                                            ):
+                                                eligible_rows = {
+                                                    candidate["row_number"]
+                                                    for status in (READY,)
+                                                    for candidate in state["selection_result"]["add_products"][status]
+                                                }
+                                                try:
+                                                    state["selection_state"] = set_product_selection(
+                                                        state["selection_state"],
+                                                        source_row,
+                                                        selected=bool(event.value),
+                                                        eligible_row_numbers=eligible_rows,
+                                                    )
+                                                except (KeyError, TypeError, ValueError) as exc:
+                                                    ui.notify(str(exc), type="warning")
+                                                    return
+                                                refresh_result()
+    
+                                            checkbox.on_value_change(on_product_selection)
+                                            category_product_rows.setdefault(key, []).append((
+                                                normalize_category(f"{name} {sku}"), product_row_ui
+                                            ))
+                                else:
+                                    ui.label(
+                                        "No hay productos técnicamente elegibles en esta categoría."
+                                    ).classes("text-sm text-slate-500")
+    
+                                if other_products:
+                                    ui.separator()
+                                    ui.label(
+                                        f"No seleccionables · {len(other_products):,}"
+                                    ).classes("text-sm font-semibold text-slate-500")
+                                    for product, item in other_products:
+                                        row = product["row"]
+                                        sku = str(row.get(mapping["sku"], "") or "Sin SKU")
+                                        name = str(row.get(mapping["name"], "") or "Sin nombre")
+                                        ui.label(
+                                            f'{item["technical_status"]} · {name} · {sku} · {item["reason"]}'
+                                        ).classes("text-xs text-slate-500")
+    
+                        category_panels[key] = category_card
 
                 def filter_categories(event):
                     query = normalize_category(event.value)
