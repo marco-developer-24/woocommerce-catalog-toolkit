@@ -908,8 +908,8 @@ def build_ui():
                                 f"{len(category_products):,} productos · "
                                 f"{selected_in_category:,} seleccionados"
                             ).classes("text-xs text-slate-500")
-                                with ui.expansion(
-                                    "Ver productos y configurar destino",
+                            with ui.expansion(
+                                "Ver productos y configurar destino",
                                 icon="category",
                                 value=False,
                             ).classes("w-full border border-slate-200 rounded-lg") as panel:
