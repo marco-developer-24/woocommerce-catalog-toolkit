@@ -14,12 +14,11 @@ from src.application.store_setup import (
 from src.application.catalog_preparation import prepare_catalog
 from src.application.catalog_exports import make_dict_rows_csv
 from src.application.woocommerce_categories import (
-    is_destination_selection_confirmed,
     suggest_destination_categories,
 )
 from src.operations.add_products import prepare_add_products
 from src.operations.select_products import normalize_category
-from src.application.product_selection import SELECTED, NOT_SELECTED, set_product_selection
+from src.application.product_selection import set_product_selection
 from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
 
 
@@ -109,6 +108,8 @@ def build_ui():
                 state["store_mode"] = "not_decided" if state["provider"] else "empty"
                 state["preparation"] = None
                 state["selection_result"] = None
+                state["selection_category_mappings"] = {}
+                state["selection_confirmations"] = {}
                 store_selectors.clear()
                 preparation_results.clear()
                 category_selection_area.clear()
@@ -872,8 +873,10 @@ def build_ui():
                                 accepted_state["value"] = value
                                 if value:
                                     state["selection_confirmations"][category_key] = value
+                                    state["selection_category_mappings"][category_key] = value
                                 else:
                                     state["selection_confirmations"].pop(category_key, None)
+                                    state["selection_category_mappings"].pop(category_key, None)
                                 refresh_result()
 
                             accepted.on_value_change(on_accept_suggestion)
