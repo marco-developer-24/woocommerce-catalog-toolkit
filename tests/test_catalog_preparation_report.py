@@ -4,8 +4,8 @@ from src.application.catalog_preparation_report import build_preparation_review
 
 
 class CatalogPreparationReviewTests(unittest.TestCase):
-    def test_includes_all_classification_outcomes_and_preserves_source_order(self):
-        def item(row_number, status, match_status, reason, sku):
+    def test_report_preserves_technical_status_and_applies_selection_only_to_ready(self):
+        def operation_item(row_number, status, match_status, reason, sku):
             return {
                 "row_number": row_number,
                 "row": {
@@ -21,65 +21,94 @@ class CatalogPreparationReviewTests(unittest.TestCase):
 
         result = {
             "add_products": {
-                "READY": [item(2, "READY", "MISSING", "Ready for selection", "NEW-1")],
-                "REVIEW": [item(6, "REVIEW", "AMBIGUOUS", "Needs review", "CHECK-1")],
-                "BLOCKED": [item(4, "BLOCKED", "DUPLICATE", "Duplicate SKU", "DUP-1")],
-                "EXCLUDED": [item(3, "EXCLUDED", "EXISTS", "Already exists", "OLD-1")],
+                "READY": [
+                    operation_item(2, "READY", "MISSING", "Ready for selection", "NEW-1"),
+                    operation_item(5, "READY", "MISSING", "Ready for selection", "NEW-2"),
+                ],
+                "REVIEW": [
+                    operation_item(6, "REVIEW", "AMBIGUOUS", "Needs review", "CHECK-1")
+                ],
+                "BLOCKED": [
+                    operation_item(4, "BLOCKED", "DUPLICATE", "Duplicate SKU", "DUP-1")
+                ],
+                "EXCLUDED": [
+                    operation_item(3, "EXCLUDED", "EXISTS", "Already exists", "OLD-1")
+                ],
             },
             "selection": {
-                "items": [{
-                    "row_number": 2,
-                    "status": "SELECTED",
-                    "reason_code": "SELECTED_BY_PRICE",
-                    "reason": "Selected by ascending price.",
-                    "category_position": 1,
-                }]
+                "items": [
+                    {
+                        "row_number": 2,
+                        "status": "SELECTED",
+                        "reason_code": "SELECTED",
+                        "reason": "Selected by the operator.",
+                    },
+                    {
+                        "row_number": 5,
+                        "status": "NOT_SELECTED",
+                        "reason_code": "NOT_SELECTED",
+                        "reason": "Not selected by the operator.",
+                    },
+                    {
+                        "row_number": 3,
+                        "status": "NOT_SELECTED",
+                        "technical_status": "EXCLUDED",
+                        "reason_code": "EXCLUDED",
+                        "reason": "Already exists",
+                    },
+                    {
+                        "row_number": 4,
+                        "status": "NOT_SELECTED",
+                        "technical_status": "BLOCKED",
+                        "reason_code": "BLOCKED",
+                        "reason": "Duplicate SKU",
+                    },
+                    {
+                        "row_number": 6,
+                        "status": "NOT_SELECTED",
+                        "technical_status": "REVIEW",
+                        "reason_code": "REVIEW",
+                        "reason": "Needs review",
+                    },
+                ]
             },
         }
 
         rows = build_preparation_review(result, "Category", "Price")
 
-        self.assertEqual([row["CSV row"] for row in rows], [2, 3, 4, 6])
+        self.assertEqual([row["CSV row"] for row in rows], [2, 3, 4, 5, 6])
         self.assertEqual(
             [row["Status"] for row in rows],
-            ["SELECTED", "EXCLUDED", "BLOCKED", "REVIEW"],
+            ["SELECTED", "EXCLUDED", "BLOCKED", "NOT_SELECTED", "REVIEW"],
         )
-        self.assertEqual(rows[0]["Reason code"], "SELECTED_BY_PRICE")
+        self.assertEqual(rows[0]["Reason code"], "SELECTED")
         self.assertEqual(rows[1]["Reason"], "Already exists")
         self.assertEqual(rows[2]["Reason"], "Duplicate SKU")
-        self.assertEqual(rows[3]["Reason"], "Needs review")
-        self.assertEqual(rows[3]["Reason code"], "STOCK_REVIEW")
+        self.assertEqual(rows[3]["Reason code"], "NOT_SELECTED")
+        self.assertEqual(rows[4]["Reason code"], "STOCK_REVIEW")
+        self.assertIsNone(rows[0]["Category position"])
 
-    def test_ready_product_outside_selection_is_reported(self):
+    def test_report_handles_missing_selection_item_for_technical_row(self):
         result = {
             "add_products": {
-                "READY": [{
+                "READY": [],
+                "REVIEW": [{
                     "row_number": 2,
-                    "row": {"SKU": "NEW", "Category": "Notebooks", "Price": "50"},
-                    "sku": "NEW",
-                    "status": "READY",
-                    "match_status": "MISSING",
-                    "reason": "Ready for selection",
+                    "row": {"SKU": "CHECK", "Category": "Notebooks", "Price": "50"},
+                    "sku": "CHECK",
+                    "status": "REVIEW",
+                    "match_status": "AMBIGUOUS",
+                    "reason": "Needs review",
                 }],
-                "REVIEW": [],
                 "BLOCKED": [],
                 "EXCLUDED": [],
             },
-            "selection": {
-                "items": [{
-                    "row_number": 2,
-                    "status": "NOT_SELECTED",
-                    "reason_code": "CATEGORY_LIMIT_REACHED",
-                    "reason": "Category limit reached.",
-                    "category_position": 2,
-                }]
-            },
+            "selection": {"items": []},
         }
 
         rows = build_preparation_review(result, "Category", "Price")
-
-        self.assertEqual(rows[0]["Status"], "NOT_SELECTED")
-        self.assertEqual(rows[0]["Reason code"], "CATEGORY_LIMIT_REACHED")
+        self.assertEqual(rows[0]["Status"], "REVIEW")
+        self.assertEqual(rows[0]["Price"], "50")
 
 
 if __name__ == "__main__":
