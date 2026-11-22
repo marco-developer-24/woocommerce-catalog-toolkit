@@ -1,6 +1,7 @@
 """NiceGUI interface for preparing WooCommerce catalog imports."""
 
 from nicegui import ui
+from decimal import Decimal, InvalidOperation
 
 from src.application.provider_setup import (
     confirm_provider_setup,
@@ -16,9 +17,9 @@ from src.application.woocommerce_categories import (
     is_destination_selection_confirmed,
     suggest_destination_categories,
 )
-from src.application.manual_product_selection import set_manual_product_selection
 from src.operations.add_products import prepare_add_products
 from src.operations.select_products import normalize_category
+from src.application.product_selection import SELECTED, NOT_SELECTED, set_product_selection
 from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
 
 
@@ -44,7 +45,8 @@ def build_ui():
         "preparation": None,
         "selection_result": None,
         "selection_category_mappings": {},
-        "selection_category_limits": {},
+        "selection_state": {},
+        "selection_confirmations": {},
     }
     provider_selectors = {}
     store_selectors = {}
@@ -132,6 +134,9 @@ def build_ui():
                     provider_upload.reset()
                 state["provider_inspection"] = None
                 state["provider"] = None
+                state["selection_state"] = {}
+                state["selection_category_mappings"] = {}
+                state["selection_confirmations"] = {}
                 provider_selectors.clear()
                 provider_details.clear()
                 provider_preview.clear()
@@ -529,6 +534,9 @@ def build_ui():
         def prepare_addition():
             category_selection_area.clear()
             state["selection_result"] = None
+            state["selection_state"] = {}
+            state["selection_category_mappings"] = {}
+            state["selection_confirmations"] = {}
             provider = state["provider"]
             if provider is None:
                 ui.notify("Primero confirmá el mapeo del proveedor.", type="warning")
@@ -552,7 +560,6 @@ def build_ui():
             catalog_rows = store["rows"] if store else []
             catalog_sku_column = store["mapping"]["sku"] if store else "SKU"
             mapping = provider["mapping"]
-
             try:
                 result = prepare_add_products(
                     provider["rows"],
@@ -592,7 +599,6 @@ def build_ui():
                 BLOCKED: "text-red-700",
                 EXCLUDED: "text-slate-600",
             }
-
             all_items = sorted(
                 (
                     item
@@ -614,22 +620,19 @@ def build_ui():
                     "status": status_labels[item["status"]],
                     "reason": item["reason"],
                 })
-
             with preparation_results:
                 ui.separator()
                 ui.label("Resultado de la preparación").classes(
                     "text-lg font-semibold text-slate-900"
                 )
                 ui.label(
-                    "Cada fila del proveedor aparece clasificada. En esta etapa "
-                    "todavía no se modifica ni se exporta ningún producto."
+                    "Cada fila del proveedor queda clasificada técnicamente. "
+                    "La selección comercial se realiza por separado."
                 ).classes("text-sm text-slate-600")
                 with ui.grid(columns=2).classes("w-full gap-3"):
                     for status in (READY, REVIEW, BLOCKED, EXCLUDED):
                         with ui.card().classes("p-3 gap-1"):
-                            ui.label(status_labels[status]).classes(
-                                "text-xs text-slate-500"
-                            )
+                            ui.label(status_labels[status]).classes("text-xs text-slate-500")
                             ui.label(f"{counts[status]:,}").classes(
                                 f"text-2xl font-semibold {status_styles[status]}"
                             )
@@ -640,21 +643,19 @@ def build_ui():
                 ).classes("text-sm font-medium text-slate-700")
                 if store is None:
                     ui.label(
-                        "Preparación sin exportación WooCommerce: no se verificó "
-                        "si estos SKU ya existen en la tienda. Los candidatos nuevos "
-                        "son relativos a una referencia vacía."
+                        "Sin exportación WooCommerce no se verificaron SKU existentes "
+                        "ni categorías de destino."
                     ).classes("text-sm text-amber-800")
-                columns = [
-                    {"name": "row_number", "label": "Fila", "field": "row_number", "align": "left"},
-                    {"name": "sku", "label": "SKU", "field": "sku", "align": "left"},
-                    {"name": "name", "label": "Producto", "field": "name", "align": "left"},
-                    {"name": "price", "label": "Precio", "field": "price", "align": "left"},
-                    {"name": "stock", "label": "Stock", "field": "stock", "align": "left"},
-                    {"name": "status", "label": "Clasificación", "field": "status", "align": "left"},
-                    {"name": "reason", "label": "Motivo", "field": "reason", "align": "left"},
-                ]
                 ui.table(
-                    columns=columns,
+                    columns=[
+                        {"name": "row_number", "label": "Fila", "field": "row_number", "align": "left"},
+                        {"name": "sku", "label": "SKU", "field": "sku", "align": "left"},
+                        {"name": "name", "label": "Producto", "field": "name", "align": "left"},
+                        {"name": "price", "label": "Precio", "field": "price", "align": "left"},
+                        {"name": "stock", "label": "Stock", "field": "stock", "align": "left"},
+                        {"name": "status", "label": "Clasificación", "field": "status", "align": "left"},
+                        {"name": "reason", "label": "Motivo", "field": "reason", "align": "left"},
+                    ],
                     rows=rows,
                     row_key="row_number",
                     pagination=20,
@@ -665,6 +666,7 @@ def build_ui():
             render_category_selection()
 
         def render_category_selection():
+            """Render category destinations and individual product selection."""
             category_selection_area.clear()
             category_controls.clear()
             provider = state["provider"]
@@ -672,402 +674,361 @@ def build_ui():
                 return
 
             mapping = provider["mapping"]
-            category_column = mapping.get("category")
-            if not category_column:
-                return
-
+            category_column = mapping["category"]
             categories_by_key = {}
-            for row in provider["rows"]:
-                value = str(row.get(category_column, "") or "").strip()
-                key = normalize_category(value)
-                if key:
-                    categories_by_key.setdefault(key, value)
+            products_by_category = {}
+            for row_number, row in enumerate(provider["rows"], start=2):
+                category = str(row.get(category_column, "") or "").strip()
+                key = normalize_category(category)
+                if not key:
+                    key = "__sin_categoria__"
+                    category = "Sin categoría"
+                categories_by_key.setdefault(key, category)
+                products_by_category.setdefault(key, []).append(
+                    {"row_number": row_number, "row": row}
+                )
 
-            categories = sorted(categories_by_key.items(), key=lambda item: item[1].casefold())
-            category_counts = {}
-            for row in provider["rows"]:
-                key = normalize_category(row.get(category_column, ""))
-                if key:
-                    category_counts[key] = category_counts.get(key, 0) + 1
-
+            categories = sorted(
+                categories_by_key.items(),
+                key=lambda pair: pair[1].casefold(),
+            )
             store = state["store"]
             destinations = store["observed_categories"] if store else []
             suggestions = suggest_destination_categories(
                 [category for _, category in categories],
                 destinations,
             ) if destinations else {}
-            category_panels = {}
+
+            def build_result():
+                current_store = state["store"]
+                catalog_rows = current_store["rows"] if current_store else []
+                catalog_sku_column = (
+                    current_store["mapping"]["sku"] if current_store else "SKU"
+                )
+                current_mapping = state["provider"]["mapping"]
+                return prepare_catalog(
+                    state["provider"]["rows"],
+                    catalog_rows,
+                    selection_config={
+                        "category_column": current_mapping["category"],
+                        "stock_column": current_mapping.get("stock"),
+                        "category_mappings": state["selection_category_mappings"],
+                    },
+                    supplier_columns={
+                        "sku": current_mapping["sku"],
+                        "name": current_mapping["name"],
+                        "price": current_mapping["price"],
+                        "catalog_sku": catalog_sku_column,
+                    },
+                    selection_state=state["selection_state"],
+                )
+
+            def refresh_result():
+                try:
+                    result = build_result()
+                except (KeyError, TypeError, ValueError) as exc:
+                    ui.notify(f"No se pudo actualizar la selección: {exc}", type="negative")
+                    return
+                state["selection_result"] = result
+                state["selection_state"] = dict(result["selection_state"])
+                summary = result["summary"]
+                summary_labels["selected"].set_text(f'{summary["selected"]:,}')
+                summary_labels["exportable"].set_text(f'{summary["exportable"]:,}')
+                summary_labels["not_selected"].set_text(f'{summary["ready_not_selected"]:,}')
+                summary_labels["review"].set_text(f'{summary["review"]:,}')
+                summary_labels["blocked"].set_text(f'{summary["blocked"]:,}')
+                summary_labels["existing"].set_text(f'{summary["excluded_existing"]:,}')
+                update_export_area(result)
+
+            def update_export_area(result):
+                export_area.clear()
+                with export_area:
+                    if result["export_rows"]:
+                        export_fields = [
+                            "SKU", "Name", "Regular price", "Published", "Type", "Categories"
+                        ]
+                        csv_content = make_dict_rows_csv(
+                            result["export_rows"], export_fields
+                        )
+                        ui.button(
+                            "Descargar CSV de altas",
+                            on_click=lambda data=csv_content: ui.download(
+                                data, "woocommerce-altas.csv"
+                            ),
+                            icon="download",
+                        ).props("color=primary")
+                        ui.label(
+                            "Solo incluye productos seleccionados, técnicamente elegibles "
+                            "y con destino WooCommerce confirmado."
+                        ).classes("text-sm text-green-700")
+                    else:
+                        ui.label(
+                            "Todavía no hay productos exportables. Seleccioná productos "
+                            "elegibles y confirmá el destino de sus categorías."
+                        ).classes("text-sm text-amber-800")
+
+            result = build_result()
+            state["selection_result"] = result
+            state["selection_state"] = dict(result["selection_state"])
+            summary_labels = {}
+            category_controls.clear()
 
             with category_selection_area:
                 ui.separator()
-                ui.label("5. Selección por categoría").classes(
+                ui.label("5. Selección de productos").classes(
                     "text-lg font-semibold text-slate-900"
                 )
                 ui.label(
-                    "Las categorías con una correspondencia confiable se preseleccionan. "
-                    "Revisá el destino sugerido y definí cuántos productos querés preparar."
+                    "Cada producto comienza sin seleccionar. Elegí individualmente "
+                    "los que querés incorporar. La elegibilidad técnica y el destino "
+                    "WooCommerce son decisiones independientes."
                 ).classes("text-sm text-slate-600")
-                with ui.row().classes("w-full items-center justify-between"):
-                    ui.label(f"{len(categories)} categorías · {len(provider['rows']):,} productos").classes(
-                        "text-xs text-slate-500"
+                with ui.grid(columns=3).classes("w-full gap-3"):
+                    summary_cards = (
+                        ("selected", "Seleccionados"),
+                        ("exportable", "Listos para exportar"),
+                        ("not_selected", "Elegibles sin seleccionar"),
+                        ("review", "En revisión"),
+                        ("blocked", "Bloqueados"),
+                        ("existing", "Ya existentes"),
                     )
-                    ui.label("La sugerencia no confirma el destino ni selecciona todos los productos.").classes(
-                        "text-xs text-amber-700"
-                    )
+                    for key, label in summary_cards:
+                        with ui.card().classes("p-3 gap-1"):
+                            ui.label(label).classes("text-xs text-slate-500")
+                            summary_labels[key] = ui.label("0").classes(
+                                "text-2xl font-semibold text-slate-900"
+                            )
+
                 category_filter = ui.input(
-                    label="Buscar categoría",
+                    label="Buscar categoría o producto",
                     placeholder="Escribí para filtrar…",
                 ).props("clearable").classes("w-full")
 
                 if not destinations:
                     ui.label(
-                        "No hay categorías de destino verificadas. Podés configurar "
-                        "la selección, pero no se habilitará la exportación sin una "
-                        "exportación WooCommerce que permita asignar categorías existentes."
+                        "No hay categorías de destino verificadas. Podés seleccionar "
+                        "productos, pero no se generará un CSV hasta cargar una "
+                        "exportación WooCommerce con categorías de destino."
                     ).classes("text-sm text-amber-800")
 
+                category_panels = {}
                 for key, category in categories:
-                    suggestion = suggestions.get(" ".join(key.split()), {
+                    category_products = products_by_category[key]
+                    category_items = {
+                        item["row_number"]: item
+                        for item in result["selection"]["items"]
+                    }
+                    selected_in_category = sum(
+                        1 for product in category_products
+                        if result["selection_state"].get(product["row_number"]) == "SELECTED"
+                    )
+                    suggestion = suggestions.get(key, {
                         "status": "unmatched",
                         "destination": None,
                         "match_type": None,
                     })
                     suggested_destination = suggestion["destination"]
-                    is_suggested = suggestion["status"] == "suggested"
-                    initially_enabled = is_suggested
+                    confirmed_value = state["selection_confirmations"].get(key)
+                    destination_value = state["selection_category_mappings"].get(key)
+                    if destination_value not in destinations:
+                        destination_value = suggested_destination
 
                     with ui.expansion(
-                        f"{category} · {category_counts.get(key, 0):,} productos",
+                        f"{category} · {len(category_products):,} productos · "
+                        f"{selected_in_category:,} seleccionados",
                         icon="category",
                         value=False,
                     ).classes("w-full border border-slate-200 rounded-lg") as panel:
-                        with ui.row().classes("w-full items-center gap-3"):
-                            enabled = ui.checkbox(
-                                "Incluir categoría",
-                                value=initially_enabled,
-                            )
-                            limit = ui.number(
-                                label="Cupo de productos",
-                                value=0,
-                                min=0,
-                                precision=0,
-                            ).classes("w-40")
-
                         destination = ui.select(
                             options=destinations,
-                            value=suggested_destination,
+                            value=destination_value,
                             label="Categoría de destino en WooCommerce",
                             clearable=True,
                         ).classes("w-full")
 
-                        accept_suggestion = None
-                        accepted_destination = {"value": None}
-                        if is_suggested:
+                        accepted_destination = {"value": confirmed_value}
+                        if suggestion["status"] == "suggested":
                             match_label = (
-                                "Coincidencia exacta de categoría"
+                                "Coincidencia exacta de ruta"
                                 if suggestion["match_type"] == "exact_path"
                                 else "Coincidencia única por nombre"
                             )
                             ui.label(
-                                f"Sugerida · {suggested_destination} · {match_label}."
+                                f"Sugerencia: {suggested_destination} · {match_label}"
                             ).classes("text-sm text-blue-700")
-                            accept_suggestion = ui.checkbox(
-                                "Confirmo esta categoría de destino",
-                                value=False,
+                            accepted = ui.checkbox(
+                                "Confirmo el destino sugerido",
+                                value=confirmed_value == suggested_destination,
                             )
-
-                            def record_suggestion_confirmation(
-                                event,
+                            def on_accept_suggestion(
+                                event, category_key=key,
+                                accepted_state=accepted_destination,
                                 destination_selector=destination,
-                                accepted_state=accepted_destination,
                             ):
-                                accepted_state["value"] = (
-                                    destination_selector.value if event.value else None
+                                value = (
+                                    destination_selector.value
+                                    if event.value else None
                                 )
+                                accepted_state["value"] = value
+                                if value:
+                                    state["selection_confirmations"][category_key] = value
+                                else:
+                                    state["selection_confirmations"].pop(category_key, None)
+                                refresh_result()
 
-                            def invalidate_suggestion_confirmation(
-                                _,
-                                confirmation_checkbox=accept_suggestion,
-                                accepted_state=accepted_destination,
-                            ):
-                                accepted_state["value"] = None
-                                if confirmation_checkbox.value:
-                                    confirmation_checkbox.set_value(False)
-
-                            accept_suggestion.on_value_change(
-                                record_suggestion_confirmation
-                            )
-                            destination.on_value_change(
-                                invalidate_suggestion_confirmation
-                            )
+                            accepted.on_value_change(on_accept_suggestion)
                         elif suggestion["status"] == "ambiguous":
                             ui.label(
-                                "Coincidencia ambigua: hay varias categorías posibles. "
-                                "Elegí el destino manualmente."
+                                "Hay varias coincidencias posibles. Elegí el destino "
+                                "correcto manualmente."
                             ).classes("text-sm text-amber-800")
                         else:
                             ui.label(
-                                "Sin coincidencia confiable. Elegí una categoría de destino."
+                                "No hay una sugerencia confiable. Elegí el destino "
+                                "manualmente."
                             ).classes("text-sm text-amber-800")
 
+                        def on_destination_change(
+                            event, category_key=key,
+                            suggestion_data=suggestion,
+                            accepted_state=accepted_destination,
+                        ):
+                            selected_destination = event.value
+                            state["selection_confirmations"].pop(category_key, None)
+                            accepted_state["value"] = None
+                            if selected_destination:
+                                if (
+                                    suggestion_data["status"] != "suggested"
+                                    or selected_destination != suggestion_data["destination"]
+                                ):
+                                    state["selection_category_mappings"][category_key] = selected_destination
+                                else:
+                                    state["selection_category_mappings"].pop(category_key, None)
+                            else:
+                                state["selection_category_mappings"].pop(category_key, None)
+                            refresh_result()
+
+                        destination.on_value_change(on_destination_change)
                         category_controls[key] = {
-                            "source": category,
-                            "enabled": enabled,
-                            "limit": limit,
                             "destination": destination,
                             "suggestion": suggestion,
-                            "accepted_destination": accepted_destination,
                         }
+
+                        ui.separator()
+                        eligible_products = []
+                        other_products = []
+                        for product in category_products:
+                            item = category_items[product["row_number"]]
+                            if item["technical_status"] == READY:
+                                eligible_products.append((product, item))
+                            else:
+                                other_products.append((product, item))
+
+                        def price_sort_value(pair):
+                            raw = str(pair[0]["row"].get(mapping["price"], "") or "")
+                            normalized = raw.strip().replace(" ", "")
+                            if "," in normalized and "." in normalized:
+                                normalized = normalized.replace(".", "").replace(",", ".")
+                            elif "," in normalized:
+                                normalized = normalized.replace(",", ".")
+                            try:
+                                return (0, Decimal(normalized))
+                            except (InvalidOperation, ValueError):
+                                return (1, Decimal("0"))
+
+                        eligible_products.sort(key=price_sort_value)
+                        if eligible_products:
+                            ui.label(
+                                f"Productos elegibles · {len(eligible_products):,}"
+                            ).classes("text-sm font-semibold text-slate-700")
+                            for product, item in eligible_products:
+                                row = product["row"]
+                                row_number = product["row_number"]
+                                sku = str(row.get(mapping["sku"], "") or "Sin SKU")
+                                name = str(row.get(mapping["name"], "") or "Sin nombre")
+                                price = str(row.get(mapping["price"], "") or "Sin precio")
+                                selected = state["selection_state"].get(row_number) == "SELECTED"
+                                with ui.row().classes(
+                                    "w-full items-center justify-between gap-3 py-1"
+                                ):
+                                    checkbox = ui.checkbox(
+                                        f"{name} · {sku} · {price}",
+                                        value=selected,
+                                    ).classes("flex-grow")
+                                    def on_product_selection(
+                                        event, source_row=row_number
+                                    ):
+                                        eligible_rows = {
+                                            candidate["row_number"]
+                                            for status in (READY,)
+                                            for candidate in state["selection_result"]["add_products"][status]
+                                        }
+                                        try:
+                                            state["selection_state"] = set_product_selection(
+                                                state["selection_state"],
+                                                source_row,
+                                                selected=bool(event.value),
+                                                eligible_row_numbers=eligible_rows,
+                                            )
+                                        except (KeyError, TypeError, ValueError) as exc:
+                                            ui.notify(str(exc), type="warning")
+                                            return
+                                        refresh_result()
+
+                                    checkbox.on_value_change(on_product_selection)
+                        else:
+                            ui.label(
+                                "No hay productos técnicamente elegibles en esta categoría."
+                            ).classes("text-sm text-slate-500")
+
+                        if other_products:
+                            ui.separator()
+                            ui.label(
+                                f"No seleccionables · {len(other_products):,}"
+                            ).classes("text-sm font-semibold text-slate-500")
+                            for product, item in other_products:
+                                row = product["row"]
+                                sku = str(row.get(mapping["sku"], "") or "Sin SKU")
+                                name = str(row.get(mapping["name"], "") or "Sin nombre")
+                                ui.label(
+                                    f'{item["technical_status"]} · {name} · {sku} · {item["reason"]}'
+                                ).classes("text-xs text-slate-500")
+
                     category_panels[key] = panel
 
                 def filter_categories(event):
                     query = normalize_category(event.value)
                     for key, panel in category_panels.items():
+                        product_text = " ".join(
+                            str(product["row"].get(mapping["name"], "") or "")
+                            + " " + str(product["row"].get(mapping["sku"], "") or "")
+                            for product in products_by_category[key]
+                        )
                         panel.set_visibility(
                             not query
                             or query in key
                             or query in normalize_category(categories_by_key[key])
+                            or query in normalize_category(product_text)
                         )
 
                 category_filter.on_value_change(filter_categories)
+                export_area = ui.column().classes("w-full gap-2")
+                update_export_area(result)
 
-                ui.button(
-                    "Aplicar selección",
-                    on_click=apply_category_selection,
-                    icon="playlist_add_check",
-                ).props("color=primary")
-
-        def apply_category_selection():
-            provider = state["provider"]
-            if provider is None:
-                return
-
-            category_limits = {}
-            category_mappings = {}
             for key, controls in category_controls.items():
-                if not controls["enabled"].value:
-                    continue
-                raw_limit = controls["limit"].value
-                if raw_limit is None or int(raw_limit) < 0:
-                    ui.notify(
-                        f"Definí un cupo válido para {controls['source']}.",
-                        type="warning",
-                    )
-                    return
-                category_limits[controls["source"]] = int(raw_limit)
-                destination = controls["destination"].value
                 suggestion = controls["suggestion"]
-                if not is_destination_selection_confirmed(
-                    suggestion,
-                    destination,
-                    controls["accepted_destination"]["value"],
+                destination = controls["destination"].value
+                if not destination:
+                    continue
+                if (
+                    suggestion["status"] == "suggested"
+                    and destination == suggestion["destination"]
+                    and state["selection_confirmations"].get(key) != destination
                 ):
-                    ui.notify(
-                        f"Confirmá la categoría sugerida para {controls['source']} o elegí otro destino manualmente.",
-                        type="warning",
-                    )
-                    return
-                if destination:
-                    category_mappings[key] = destination
+                    continue
+                state["selection_category_mappings"][key] = destination
 
-            if not category_limits:
-                ui.notify("Activá al menos una categoría para continuar.", type="warning")
-                return
-
-            store = state["store"]
-            catalog_rows = store["rows"] if store else []
-            catalog_sku_column = store["mapping"]["sku"] if store else "SKU"
-            mapping = provider["mapping"]
-
-            try:
-                result = prepare_catalog(
-                    provider["rows"],
-                    catalog_rows,
-                    selection_config={
-                        "category_column": mapping["category"],
-                        "price_column": mapping["price"],
-                        "category_limits": category_limits,
-                        "stock_column": mapping.get("stock"),
-                        "category_mappings": category_mappings,
-                        "require_category_mapping": True,
-                    },
-                    supplier_columns={
-                        "sku": mapping["sku"],
-                        "name": mapping["name"],
-                        "price": mapping["price"],
-                        "catalog_sku": catalog_sku_column,
-                    },
-                )
-            except (KeyError, TypeError, ValueError) as exc:
-                state["selection_result"] = None
-                ui.notify(f"No se pudo aplicar la selección: {exc}", type="negative")
-                return
-
-            state["selection_result"] = result
-            state["selection_category_mappings"] = category_mappings
-            state["selection_category_limits"] = category_limits
-            render_selection_result()
-            ui.notify("Selección por categoría aplicada", type="positive")
-
-        def render_selection_result():
-            result = state["selection_result"]
-            provider = state["provider"]
-            store = state["store"]
-            if result is None or provider is None:
-                return
-
-            mapping = provider["mapping"]
-            category_selection_area.clear()
-            with category_selection_area:
-                ui.separator()
-                ui.label("Resultado de la selección").classes(
-                    "text-lg font-semibold text-slate-900"
-                )
-                summary = result["summary"]
-                with ui.grid(columns=2).classes("w-full gap-3"):
-                    for label, value in (
-                        ("Elegibles antes de seleccionar", summary["new_ready"]),
-                        ("Preparados para exportar", summary["exported"]),
-                        ("En revisión", summary["review"]),
-                        ("Bloqueados", summary["blocked"]),
-                        ("Ya existentes", summary["excluded_existing"]),
-                        ("No incluidos en el CSV", summary["ready_not_selected"]),
-                        ("Categoría sin destino", summary["unmapped_category"]),
-                    ):
-                        with ui.card().classes("p-3 gap-1"):
-                            ui.label(label).classes("text-xs text-slate-500")
-                            ui.label(f"{value:,}").classes(
-                                "text-2xl font-semibold text-slate-900"
-                            )
-
-                manual_candidates = []
-                for item in result["selection"]["items"]:
-                    if item["status"] == "SELECTED" or item["reason_code"] in {
-                        "CATEGORY_LIMIT_REACHED",
-                        "MANUALLY_EXCLUDED",
-                    }:
-                        manual_candidates.append(item)
-
-                if manual_candidates and store is not None:
-                    ui.separator()
-                    ui.label("Revisión manual").classes(
-                        "text-base font-semibold text-slate-900"
-                    )
-                    ui.label(
-                        "Podés excluir productos seleccionados o incluir candidatos "
-                        "elegibles que quedaron fuera del cupo. La herramienta no "
-                        "rellena cupos automáticamente."
-                    ).classes("text-sm text-slate-600")
-                    options = {}
-                    for item in manual_candidates:
-                        row = item["row"]
-                        sku = str(row.get(mapping["sku"], "") or "")
-                        name = str(row.get(mapping["name"], "") or "")
-                        category = str(item["category"] or "")
-                        price = str(item["price"] or "")
-                        current = (
-                            "Incluido"
-                            if item["status"] == "SELECTED"
-                            else "No incluido"
-                        )
-                        options[item["row_number"]] = (
-                            f'{current} · {sku} · {name} · {category} · {price}'
-                        )
-                    product_selector = ui.select(
-                        options=options,
-                        label="Producto para revisar",
-                        with_input=True,
-                    ).classes("w-full")
-                    decision_selector = ui.select(
-                        options={
-                            "exclude": "Excluir de las altas",
-                            "include": "Incluir en las altas",
-                        },
-                        value="exclude",
-                        label="Decisión",
-                    ).classes("w-full")
-
-                    def apply_manual_decision():
-                        if product_selector.value is None:
-                            ui.notify("Seleccioná un producto para revisar.", type="warning")
-                            return
-                        try:
-                            state["selection_result"] = set_manual_product_selection(
-                                state["selection_result"],
-                                int(product_selector.value),
-                                include=decision_selector.value == "include",
-                                category_mappings=state["selection_category_mappings"],
-                                category_limits=state["selection_category_limits"],
-                            )
-                        except (KeyError, TypeError, ValueError) as exc:
-                            ui.notify(f"No se pudo aplicar la decisión: {exc}", type="negative")
-                            return
-                        render_selection_result()
-                        ui.notify("Decisión manual aplicada.", type="positive")
-
-                    ui.button(
-                        "Aplicar decisión manual",
-                        on_click=apply_manual_decision,
-                        icon="rule",
-                    ).props("outline color=primary")
-                elif store is None:
-                    ui.label(
-                        "La revisión manual y la exportación requieren una referencia "
-                        "WooCommerce confirmada para validar SKU y categorías de destino."
-                    ).classes("text-sm text-amber-800")
-
-                selection_rows = []
-                for item in result["selection"]["items"]:
-                    selection_rows.append({
-                        "row_number": item["row_number"],
-                        "sku": str(item["row"].get(mapping["sku"], "") or ""),
-                        "name": str(item["row"].get(mapping["name"], "") or ""),
-                        "category": str(item["category"] or ""),
-                        "price": str(item["price"] or ""),
-                        "status": item["status"],
-                        "reason": item["reason"] or "",
-                    })
-                ui.table(
-                    columns=[
-                        {"name": "row_number", "label": "Fila", "field": "row_number"},
-                        {"name": "sku", "label": "SKU", "field": "sku"},
-                        {"name": "name", "label": "Producto", "field": "name"},
-                        {"name": "category", "label": "Categoría", "field": "category"},
-                        {"name": "price", "label": "Precio", "field": "price"},
-                        {"name": "status", "label": "Selección", "field": "status"},
-                        {"name": "reason", "label": "Motivo", "field": "reason"},
-                    ],
-                    rows=selection_rows,
-                    row_key="row_number",
-                    pagination=20,
-                ).classes("w-full")
-
-                if result["export_rows"] and store is not None:
-                    export_fields = [
-                        "SKU", "Name", "Regular price", "Published", "Type", "Categories"
-                    ]
-                    csv_content = make_dict_rows_csv(
-                        result["export_rows"], export_fields
-                    )
-                    ui.button(
-                        "Descargar CSV de altas",
-                        on_click=lambda data=csv_content: ui.download(
-                            data, "woocommerce-altas.csv"
-                        ),
-                        icon="download",
-                    ).props("color=primary")
-                    ui.label(
-                        "El archivo contiene únicamente productos seleccionados, "
-                        "con SKU único, precio validado y estado borrador."
-                    ).classes("text-sm text-green-700")
-                else:
-                    ui.label(
-                        "No hay productos exportables. Revisá los cupos y las "
-                        "categorías de destino. La exportación requiere una referencia "
-                        "WooCommerce con categorías observadas."
-                    ).classes("text-sm text-amber-800")
-
-
+            refresh_result()
 
         with ui.card().classes("w-full p-6 gap-4"):
             ui.label("4. Preparación de altas").classes(
