@@ -77,8 +77,19 @@ def build_ui():
         step_status.set_text(f'Etapa actual: {step_labels[step]}')
 
     ui.add_head_html("""<style>
-         .catalog-upload .q-uploader__list,
-        .catalog-upload .q-uploader__progress { display: none !important; }
+        .catalog-upload {
+            width: min(100%, 22rem) !important;
+            max-width: 100%;
+        }
+        .catalog-upload .q-uploader__list,
+        .catalog-upload .q-uploader__progress {
+            display: none !important;
+        }
+        .catalog-primary-action {
+            width: fit-content !important;
+            max-width: 100%;
+            align-self: flex-start;
+        }
     </style>""")
 
     ui.colors(
@@ -135,7 +146,7 @@ def build_ui():
                         auto_upload=True,
                         max_file_size=MAX_UPLOAD_BYTES,
                         max_files=1,
-                    ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
+                    ).props('accept=".csv" hide-upload-progress').classes("catalog-upload")
 
                 def clear_store(*, reset_upload=True):
                     if reset_upload:
@@ -263,7 +274,7 @@ def build_ui():
                             "Confirmar mapeo del proveedor",
                             on_click=confirm_provider_mapping,
                             icon="check",
-                        ).props("color=primary")
+                        ).props("color=primary").classes("catalog-primary-action")
 
                 async def handle_provider_upload(event):
                     clear_provider(reset_upload=False)
@@ -368,7 +379,7 @@ def build_ui():
                     auto_upload=True,
                     max_file_size=MAX_UPLOAD_BYTES,
                     max_files=1,
-                ).props('accept=".csv" hide-upload-progress').classes("w-full catalog-upload")
+                ).props('accept=".csv" hide-upload-progress').classes("catalog-upload")
                 store_upload.disable()
                 continue_without_store_button = ui.button(
                     "Continuar sin exportación WooCommerce",
@@ -485,7 +496,7 @@ def build_ui():
                             "Comparar catálogos",
                             on_click=confirm_store_mapping,
                             icon="compare_arrows",
-                        ).props("color=primary")
+                        ).props("color=primary").classes("catalog-primary-action")
 
                 async def handle_store_upload(event):
                     state["store_inspection"] = None
@@ -816,7 +827,7 @@ def build_ui():
                                 data, "woocommerce-altas.csv"
                             ),
                             icon="download",
-                        ).props("color=primary")
+                        ).props("color=primary").classes("catalog-primary-action")
                         ui.label(
                             "Solo incluye productos seleccionados, técnicamente elegibles "
                             "y con destino WooCommerce confirmado."
@@ -1160,14 +1171,14 @@ def build_ui():
                     "Validar catálogo",
                     on_click=prepare_addition,
                     icon="fact_check",
-                ).props("color=primary")
+                ).props("color=primary").classes("catalog-primary-action")
                 prepare_button.disable()
                 preparation_results = ui.column().classes("w-full gap-3")
                 continue_to_selection_button = ui.button(
                     "Continuar a selección de productos",
                     on_click=continue_to_selection,
                     icon="arrow_forward",
-                ).props("color=primary")
+                ).props("color=primary").classes("catalog-primary-action")
                 continue_to_selection_button.disable()
 
         with ui.column() as selection_panel:
@@ -1185,7 +1196,7 @@ def build_ui():
                     "Continuar a exportación",
                     on_click=lambda: go_to_step("export"),
                     icon="arrow_forward",
-                ).props("color=primary")
+                ).props("color=primary").classes("catalog-primary-action")
 
         with ui.column() as export_panel:
             with ui.card().classes("w-full p-6 gap-4"):
