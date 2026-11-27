@@ -4,6 +4,7 @@ from io import BytesIO
 
 import pytest
 from nicegui import ui
+from nicegui.testing.user_download import UserDownload
 from starlette.datastructures import UploadFile
 
 from src.ui.nicegui_app import build_ui
@@ -165,12 +166,14 @@ async def test_changing_suggested_destination_clears_confirmation(user):
 async def test_selected_product_can_be_downloaded_as_woocommerce_csv(
     user, monkeypatch
 ):
-    downloads = []
-    monkeypatch.setattr(
-        ui,
-        "download",
-        lambda data, filename=None: downloads.append((data, filename)),
-    )
+    download_calls = []
+    original_download = UserDownload.__call__
+
+    def capture_download(download, src, filename=None, media_type=""):
+        download_calls.append((src, filename, media_type))
+        return original_download(download, src, filename, media_type)
+
+    monkeypatch.setattr(UserDownload, "__call__", capture_download)
 
     @ui.page("/")
     def page():
@@ -233,9 +236,10 @@ async def test_selected_product_can_be_downloaded_as_woocommerce_csv(
     await user.should_see("Descargar CSV de altas")
     user.find("Descargar CSV de altas").click()
 
-    assert len(downloads) == 1
-    csv_bytes, filename = downloads[0]
-    assert filename == "woocommerce-altas.csv"
+    response = await user.download.next()
+    assert len(download_calls) == 1
+    assert download_calls[0][1] == "woocommerce-altas.csv"
+    csv_bytes = response.content
 
     rows = list(csv.DictReader(io.StringIO(csv_bytes.decode("utf-8-sig"))))
     assert [row["SKU"] for row in rows] == ["NEW-001"]
