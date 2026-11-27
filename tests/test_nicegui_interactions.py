@@ -150,7 +150,7 @@ async def test_changing_suggested_destination_clears_confirmation(user):
     )
     destination_element = next(iter(destination_selector.elements))
     destination_selector.click()
-    user.find("Hogar").click()
+    user.find("Hogar", kind=ui.select).click()
 
     assert destination_element.value == "Hogar"
     assert destination_confirmation.value is False
