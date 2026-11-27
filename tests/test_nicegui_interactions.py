@@ -157,3 +157,87 @@ async def test_changing_suggested_destination_clears_confirmation(user):
 
     assert destination_element.value == "Hogar"
     assert destination_confirmation.value is False
+
+
+@pytest.mark.asyncio
+async def test_selected_product_can_be_downloaded_as_woocommerce_csv(
+    user, monkeypatch
+):
+    downloads = []
+    monkeypatch.setattr(
+        ui,
+        "download",
+        lambda data, filename=None: downloads.append((data, filename)),
+    )
+
+    @ui.page("/")
+    def page():
+        build_ui()
+
+    await user.open("/")
+
+    provider_csv = (
+        "SKU;Nombre;Categoría;Precio;Stock\\n"
+        "NEW-001;Producto seleccionado;Accesorios;1250;10\\n"
+        "NEW-002;Producto no seleccionado;Accesorios;2500;8\\n"
+        "OLD-001;Producto existente;Accesorios;3000;5\\n"
+        "LOW-001;Producto sin stock;Accesorios;900;0\\n"
+    ).encode("utf-8")
+    provider_upload = next(
+        element
+        for element in user.find(ui.upload).elements
+        if element.label == "Seleccionar CSV del proveedor"
+    )
+    provider_upload.handle_uploads([
+        UploadFile(filename="proveedor.csv", file=BytesIO(provider_csv))
+    ])
+
+    await user.should_see("Confirmar mapeo del proveedor")
+    user.find("Confirmar mapeo del proveedor").click()
+    await user.should_see("Configuración del proveedor confirmada")
+
+    store_upload = next(
+        element
+        for element in user.find(ui.upload).elements
+        if element.label == "Seleccionar exportación CSV de WooCommerce"
+    )
+    store_csv = (
+        "SKU,Name,Categories\\n"
+        "OLD-001,Producto existente,Accesorios\\n"
+    ).encode("utf-8")
+    store_upload.handle_uploads([
+        UploadFile(filename="woocommerce.csv", file=BytesIO(store_csv))
+    ])
+
+    await user.should_see("Comparar catálogos")
+    user.find("Comparar catálogos").click()
+    await user.should_see("Comparación por SKU completada")
+
+    user.find("Validar catálogo").click()
+    await user.should_see("Preparación de altas completada")
+    user.find("Continuar a selección de productos").click()
+    await user.should_see("Producto seleccionado")
+
+    user.find("Ver productos y configurar destino").click()
+    await user.should_see("Sugerencia: Accesorios")
+    user.find("Confirmo el destino sugerido").click()
+
+    user.find("Producto seleccionado").click()
+    await user.should_see("1 seleccionados")
+    await user.should_see("1 Listos para exportar")
+
+    user.find("Continuar a exportación").click()
+    await user.should_see("Descargar CSV de altas")
+    user.find("Descargar CSV de altas").click()
+
+    assert len(downloads) == 1
+    csv_bytes, filename = downloads[0]
+    assert filename == "woocommerce-altas.csv"
+
+    rows = list(csv.DictReader(io.StringIO(csv_bytes.decode("utf-8-sig"))))
+    assert [row["SKU"] for row in rows] == ["NEW-001"]
+    assert rows[0]["Name"] == "Producto seleccionado"
+    assert rows[0]["Regular price"] == "1250"
+    assert rows[0]["Published"] == "-1"
+    assert rows[0]["Type"] == "simple"
+    assert rows[0]["Categories"] == "Accesorios"
