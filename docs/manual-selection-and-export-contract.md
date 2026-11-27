@@ -141,19 +141,26 @@ Los siguientes comportamientos tienen pruebas unitarias o de integración de apl
 
 La prueba de SKU duplicados verifica que esas filas no se exporten. No debe interpretarse como evidencia de que un SKU duplicado sea seleccionable: su clasificación técnica impide esa selección.
 
-### 8.2. Validación manual de interfaz pendiente de automatizar
+### 8.2. Cobertura de interacción incorporada en PR #29 (pendiente de integración)
 
-Estos escenarios pertenecen al ciclo de vida de la interfaz NiceGUI y no están cubiertos por las pruebas unitarias anteriores:
+El PR #29 agrega pruebas de interfaz NiceGUI y pruebas unitarias específicas para las transiciones de sesión. Su matriz de CI aprobó Python 3.10, 3.11, 3.12 y 3.13. Mientras ese PR no se integre en `main`, esta cobertura debe considerarse disponible en una rama de trabajo, no en la rama principal.
 
-- [ ] Seleccionar un producto, cambiar de categoría y volver: la selección permanece.
-- [ ] Seleccionar un producto, aplicar y quitar un filtro de búsqueda: la selección permanece.
-- [ ] Reemplazar el CSV del proveedor: se reinician selección, destinos y confirmaciones de la sesión anterior.
-- [ ] Confirmar un destino, cambiarlo y comprobar que la confirmación anterior queda invalidada.
-- [ ] Cambiar un destino no modifica las selecciones de productos.
-- [ ] Una sugerencia automática no habilita la exportación hasta ser confirmada.
-- [ ] Después de cada interacción, los contadores y la lista exportable reflejan el estado actual.
+Pruebas de interfaz en `tests/test_nicegui_interactions.py`:
 
-Para ejecutar esta validación manual, usar un CSV pequeño con al menos dos categorías, dos productos `READY` y una fila no seleccionable. Registrar los resultados y cualquier incidencia antes de solicitar revisión del PR.
+- [x] La navegación a Validación queda bloqueada hasta confirmar el archivo del proveedor.
+- [x] Cargar un CSV real de prueba, confirmar el mapeo y llegar a la selección de productos.
+- [x] Seleccionar productos mediante controles reales de la interfaz y comprobar la actualización del contador.
+- [x] Aplicar una búsqueda, comprobar la visibilidad de las filas y continuar seleccionando productos.
+- [x] Confirmar una sugerencia de destino, cambiar el destino y comprobar que la confirmación anterior se invalida.
+
+Pruebas unitarias de transiciones en `tests/test_selection_session.py`:
+
+- [x] Reemplazar o quitar el proveedor limpia selección, destinos y confirmaciones.
+- [x] Cambiar el destino invalida la confirmación y conserva las selecciones de productos.
+- [x] Registrar una sugerencia como destino no crea por sí mismo una confirmación ni un mapeo manual.
+- [x] Limpiar el destino elimina el mapeo y la confirmación asociados.
+
+Estas pruebas no demuestran todavía todos los recorridos posibles de la interfaz ni sustituyen la validación integral de exportación.
 
 ### 8.3. Criterios permanentes para cambios futuros
 
@@ -185,6 +192,7 @@ Ante cambios en selección, elegibilidad, destinos o exportación:
 3. Verificar que la identidad siga dependiendo de `row_number`, no del SKU ni del orden de presentación.
 4. Verificar que la exportación aplique las tres condiciones de forma conjunta.
 5. Validar la interacción de la interfaz y la generación del CSV con los archivos de prueba representativos.
-6. Actualizar este documento cuando cambie deliberadamente el comportamiento contractual.
+6. Mantener diferenciada la cobertura disponible en `main` de la cobertura que exista únicamente en PRs abiertos.
+7. Actualizar este documento cuando cambie deliberadamente el comportamiento contractual.
 
 La navegación por etapas forma parte del flujo vigente en `src/ui/nicegui_app.py`; no depende del modelo anterior de cupos del PR #24.
