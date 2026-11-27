@@ -179,11 +179,11 @@ async def test_selected_product_can_be_downloaded_as_woocommerce_csv(
     await user.open("/")
 
     provider_csv = (
-        "SKU;Nombre;Categoría;Precio;Stock\\n"
-        "NEW-001;Producto seleccionado;Accesorios;1250;10\\n"
-        "NEW-002;Producto no seleccionado;Accesorios;2500;8\\n"
-        "OLD-001;Producto existente;Accesorios;3000;5\\n"
-        "LOW-001;Producto sin stock;Accesorios;900;0\\n"
+        "SKU;Nombre;Categoría;Precio;Stock\n"
+        "NEW-001;Producto seleccionado;Accesorios;1250;10\n"
+        "NEW-002;Producto no seleccionado;Accesorios;2500;8\n"
+        "OLD-001;Producto existente;Accesorios;3000;5\n"
+        "LOW-001;Producto sin stock;Accesorios;900;0\n"
     ).encode("utf-8")
     provider_upload = next(
         element
@@ -204,8 +204,8 @@ async def test_selected_product_can_be_downloaded_as_woocommerce_csv(
         if element.label == "Seleccionar exportación CSV de WooCommerce"
     )
     store_csv = (
-        "SKU,Name,Categories\\n"
-        "OLD-001,Producto existente,Accesorios\\n"
+        "SKU,Name,Categories\n"
+        "OLD-001,Producto existente,Accesorios\n"
     ).encode("utf-8")
     store_upload.handle_uploads([
         UploadFile(filename="woocommerce.csv", file=BytesIO(store_csv))
