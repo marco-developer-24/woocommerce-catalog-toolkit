@@ -81,3 +81,68 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
     user.find("Producto hogar").click()
     await user.should_see("Seleccionados")
     await user.should_see("2")
+
+
+
+@pytest.mark.asyncio
+async def test_changing_suggested_destination_clears_confirmation(user):
+    @ui.page("/")
+    def page():
+        build_ui()
+
+    await user.open("/")
+
+    provider_csv = (
+        "SKU;Nombre;Categoría;Precio;Stock\\n"
+        "TEST-001;Producto de prueba;Accesorios;1250;10\\n"
+    ).encode("utf-8")
+    uploads = user.find(ui.upload).elements
+    provider_upload = next(
+        element
+        for element in uploads
+        if element.label == "Seleccionar CSV del proveedor"
+    )
+    provider_upload.handle_uploads([
+        UploadFile(filename="proveedor.csv", file=BytesIO(provider_csv))
+    ])
+
+    await user.should_see("Confirmar mapeo del proveedor")
+    user.find("Confirmar mapeo del proveedor").click()
+    await user.should_see("Configuración del proveedor confirmada")
+
+    store_upload = next(
+        element
+        for element in user.find(ui.upload).elements
+        if element.label == "Seleccionar exportación CSV de WooCommerce"
+    )
+    store_csv = (
+        "SKU,Name,Categories\\n"
+        "STORE-001,Producto existente,Accesorios\\n"
+        "STORE-002,Otro producto,Hogar\\n"
+    ).encode("utf-8")
+    store_upload.handle_uploads([
+        UploadFile(filename="woocommerce.csv", file=BytesIO(store_csv))
+    ])
+
+    await user.should_see("Comparar catálogos")
+    user.find("Comparar catálogos").click()
+    await user.should_see("Comparación por SKU completada")
+
+    user.find("Validar catálogo").click()
+    await user.should_see("Preparación de altas completada")
+    user.find("Continuar a selección de productos").click()
+    await user.should_see("Producto de prueba")
+
+    user.find("Ver productos y configurar destino").click()
+    await user.should_see("Sugerencia: Accesorios")
+
+    destination_confirmation = user.find(
+        "Confirmo el destino sugerido"
+    )
+    destination_confirmation.click()
+    assert destination_confirmation.value is True
+
+    user.find("Categoría de destino en WooCommerce").click()
+    user.find("Hogar").click()
+
+    assert destination_confirmation.value is False
