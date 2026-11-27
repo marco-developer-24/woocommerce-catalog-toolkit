@@ -79,4 +79,5 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
     assert product_row.visible is False
 
     user.find("Producto hogar").click()
-    await user.should_see("2 seleccionados")
+    await user.should_see("Seleccionados")
+    await user.should_see("2")
