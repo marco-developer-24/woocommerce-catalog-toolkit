@@ -83,7 +83,6 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
     await user.should_see("2")
 
 
-
 @pytest.mark.asyncio
 async def test_changing_suggested_destination_clears_confirmation(user):
     @ui.page("/")
@@ -92,10 +91,12 @@ async def test_changing_suggested_destination_clears_confirmation(user):
 
     await user.open("/")
 
+    # Keep a single provider category so the suggestion checkbox and
+    # destination selector are unambiguous in this interaction test.
     provider_csv = (
         "SKU;Nombre;Categoría;Precio;Stock\n"
         "TEST-001;Producto de prueba;Accesorios;1250;10\n"
-        "TEST-002;Producto hogar;Hogar;2500;8\n"
+        "TEST-002;Producto hogar;Accesorios;2500;8\n"
     ).encode("utf-8")
     uploads = user.find(ui.upload).elements
     provider_upload = next(
