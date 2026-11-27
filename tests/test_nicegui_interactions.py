@@ -37,7 +37,7 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
         "TEST-001;Producto de prueba;Accesorios;1250;10\n"
     ).encode("utf-8")
     upload = next(iter(user.find(ui.upload).elements))
-    await upload.handle_uploads([
+    upload.handle_uploads([
         UploadFile(filename="catalogo.csv", file=BytesIO(csv_content))
     ])
 
