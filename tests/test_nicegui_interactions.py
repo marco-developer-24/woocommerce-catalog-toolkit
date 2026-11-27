@@ -63,7 +63,17 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
 
     await user.should_see("1 seleccionados")
 
+    product_checkbox = next(iter(user.find("Producto de prueba").elements))
+    home_checkbox = next(iter(user.find("Producto hogar").elements))
+    product_row = product_checkbox.parent_slot.parent.parent_slot.parent
+    home_row = home_checkbox.parent_slot.parent.parent_slot.parent
+
+    assert product_row.visible is True
+    assert home_row.visible is True
+
     search = user.find("Buscar productos o categorías")
     search.type("Hogar")
 
     await user.should_see("Producto hogar")
+    assert home_row.visible is True
+    assert product_row.visible is False
