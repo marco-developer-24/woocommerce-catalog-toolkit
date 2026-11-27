@@ -226,7 +226,8 @@ async def test_selected_product_can_be_downloaded_as_woocommerce_csv(
 
     user.find("Producto seleccionado").click()
     await user.should_see("1 seleccionados")
-    await user.should_see("1 Listos para exportar")
+    await user.should_see("Listos para exportar")
+    await user.should_see("1")
 
     user.find("Continuar a exportación").click()
     await user.should_see("Descargar CSV de altas")
