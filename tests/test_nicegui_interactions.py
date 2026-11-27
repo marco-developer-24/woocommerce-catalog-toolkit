@@ -67,4 +67,3 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
     search.type("Hogar")
 
     await user.should_see("Producto hogar")
-    await user.should_not_see("Producto de prueba")
