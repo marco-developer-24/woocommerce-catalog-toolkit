@@ -95,6 +95,7 @@ async def test_changing_suggested_destination_clears_confirmation(user):
     provider_csv = (
         "SKU;Nombre;Categoría;Precio;Stock\n"
         "TEST-001;Producto de prueba;Accesorios;1250;10\n"
+        "TEST-002;Producto hogar;Hogar;2500;8\n"
     ).encode("utf-8")
     uploads = user.find(ui.upload).elements
     provider_upload = next(
@@ -109,6 +110,7 @@ async def test_changing_suggested_destination_clears_confirmation(user):
     await user.should_see("Confirmar mapeo del proveedor")
     user.find("Confirmar mapeo del proveedor").click()
     await user.should_see("Configuración del proveedor confirmada")
+    await user.should_see("2 productos listos para comparar")
 
     store_upload = next(
         element
