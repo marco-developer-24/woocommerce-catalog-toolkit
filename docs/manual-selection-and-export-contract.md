@@ -141,9 +141,9 @@ Los siguientes comportamientos tienen pruebas unitarias o de integración de apl
 
 La prueba de SKU duplicados verifica que esas filas no se exporten. No debe interpretarse como evidencia de que un SKU duplicado sea seleccionable: su clasificación técnica impide esa selección.
 
-### 8.2. Cobertura de interacción incorporada en PR #29 (pendiente de integración)
+### 8.2. Cobertura de interacción integrada en `main`
 
-El PR #29 agrega pruebas de interfaz NiceGUI y pruebas unitarias específicas para las transiciones de sesión. Su matriz de CI aprobó Python 3.10, 3.11, 3.12 y 3.13. Mientras ese PR no se integre en `main`, esta cobertura debe considerarse disponible en una rama de trabajo, no en la rama principal.
+El PR #29 incorporó a `main` pruebas de interfaz NiceGUI y pruebas unitarias específicas para las transiciones de sesión. La matriz de CI del PR aprobó Python 3.10, 3.11, 3.12 y 3.13 antes de su integración. Estas pruebas forman parte de la cobertura automatizada disponible en la rama principal.
 
 Pruebas de interfaz en `tests/test_nicegui_interactions.py`:
 
