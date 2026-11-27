@@ -35,6 +35,7 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
     csv_content = (
         "SKU;Nombre;Categoría;Precio;Stock\n"
         "TEST-001;Producto de prueba;Accesorios;1250;10\n"
+        "TEST-002;Producto hogar;Hogar;2500;8\n"
     ).encode("utf-8")
     uploads = user.find(ui.upload).elements
     upload = next(
@@ -61,3 +62,9 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
     user.find("Producto de prueba").click()
 
     await user.should_see("1 seleccionados")
+
+    search = user.find("Buscar productos o categorías")
+    search.type("Hogar")
+
+    await user.should_see("Producto hogar")
+    await user.should_not_see("Producto de prueba")
