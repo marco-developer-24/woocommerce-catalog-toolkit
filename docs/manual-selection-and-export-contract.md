@@ -119,36 +119,52 @@ Reglas de interfaz:
 
 ## 8. Criterios de aceptación y regresión
 
-Estos criterios son una lista de verificación permanente para cambios futuros. Una modificación del flujo debe mantenerlos o documentar explícitamente el cambio de contrato.
+Estos criterios son una lista de verificación permanente para cambios futuros. Se distingue la cobertura automatizada disponible de la validación manual de interfaz. No marcar como automatizado un escenario que solo se haya inspeccionado en el código.
 
-### Selección
+### 8.1. Cobertura automatizada existente
 
-- [ ] Al iniciar una sesión, todas las filas están `NOT_SELECTED`.
-- [ ] Un producto `READY` puede seleccionarse y deseleccionarse individualmente.
-- [ ] Un producto `REVIEW`, `BLOCKED` o `EXCLUDED` no puede seleccionarse.
-- [ ] Dos filas con SKU duplicado mantienen estados independientes por `row_number`.
-- [ ] Ordenar, filtrar o navegar no cambia las selecciones.
-- [ ] Reemplazar el proveedor reinicia el estado.
-- [ ] Recalcular no selecciona productos automáticamente.
-- [ ] Una fila que deja de ser `READY` pierde su selección.
+Los siguientes comportamientos tienen pruebas unitarias o de integración de aplicación en `tests/test_product_selection_state.py`, `tests/test_manual_product_selection.py`, `tests/test_catalog_preparation.py` y `tests/test_catalog_preparation_report.py`:
 
-### Destinos
+- [x] Al preparar un catálogo, todas las filas comienzan en `NOT_SELECTED`.
+- [x] Un producto `READY` puede seleccionarse y deseleccionarse individualmente.
+- [x] Un producto no elegible no puede seleccionarse.
+- [x] Seleccionar o deseleccionar una fila no modifica las decisiones de otras filas.
+- [x] Las decisiones se identifican mediante `row_number`; las filas fuera de la sesión se rechazan.
+- [x] Los SKU existentes y duplicados no se exportan.
+- [x] Una selección sin destino confirmado se conserva, pero no se exporta.
+- [x] Un destino configurado no selecciona productos automáticamente.
+- [x] Una fila que deja de ser `READY` vuelve a `NOT_SELECTED`.
+- [x] La exportación exige selección, elegibilidad técnica y destino confirmado.
+- [x] El orden de las filas exportables no depende del orden de entrada.
+- [x] La preparación y exportación no mutan las filas ni el estado de selección recibidos.
+- [x] El CSV conserva los campos y valores de alta acordados.
 
-- [ ] Seleccionar un producto no exige tener destino confirmado.
-- [ ] Cambiar el destino invalida la confirmación anterior.
-- [ ] Cambiar el destino no modifica la selección.
-- [ ] Una categoría sin destino confirmado no aporta filas al CSV.
-- [ ] Confirmar un destino habilita únicamente los productos seleccionados y aptos de esa categoría.
+La prueba de SKU duplicados verifica que esas filas no se exporten. No debe interpretarse como evidencia de que un SKU duplicado sea seleccionable: su clasificación técnica impide esa selección.
 
-### Exportación
+### 8.2. Validación manual de interfaz pendiente de automatizar
 
+Estos escenarios pertenecen al ciclo de vida de la interfaz NiceGUI y no están cubiertos por las pruebas unitarias anteriores:
+
+- [ ] Seleccionar un producto, cambiar de categoría y volver: la selección permanece.
+- [ ] Seleccionar un producto, aplicar y quitar un filtro de búsqueda: la selección permanece.
+- [ ] Reemplazar el CSV del proveedor: se reinician selección, destinos y confirmaciones de la sesión anterior.
+- [ ] Confirmar un destino, cambiarlo y comprobar que la confirmación anterior queda invalidada.
+- [ ] Cambiar un destino no modifica las selecciones de productos.
+- [ ] Una sugerencia automática no habilita la exportación hasta ser confirmada.
+- [ ] Después de cada interacción, los contadores y la lista exportable reflejan el estado actual.
+
+Para ejecutar esta validación manual, usar un CSV pequeño con al menos dos categorías, dos productos `READY` y una fila no seleccionable. Registrar los resultados y cualquier incidencia antes de solicitar revisión del PR.
+
+### 8.3. Criterios permanentes para cambios futuros
+
+- [ ] Al iniciar una sesión nueva, todas las filas están `NOT_SELECTED`.
+- [ ] La identidad de cada fila depende de `row_number`, no del SKU ni del orden visual.
+- [ ] Buscar, ordenar, filtrar, expandir y contraer no altera decisiones.
+- [ ] Reemplazar el proveedor reinicia el estado de la sesión.
+- [ ] Cambiar el destino invalida la confirmación anterior sin modificar la selección.
 - [ ] Se exportan únicamente filas `SELECTED + READY + destino confirmado`.
-- [ ] Un producto seleccionado sin destino no se exporta.
-- [ ] Un producto no seleccionado con destino confirmado no se exporta.
-- [ ] Productos `REVIEW`, `BLOCKED` y `EXCLUDED` nunca aparecen en el CSV.
-- [ ] El orden visual no altera el conjunto exportado.
+- [ ] El CSV no incluye productos existentes, duplicados, bloqueados, en revisión o no seleccionados.
 - [ ] La exportación no muta los datos de entrada ni el estado de selección.
-- [ ] El CSV conserva el formato de altas acordado.
 
 ## 9. Fuera de alcance
 
