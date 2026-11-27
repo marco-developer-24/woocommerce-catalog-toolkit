@@ -93,8 +93,8 @@ async def test_changing_suggested_destination_clears_confirmation(user):
     await user.open("/")
 
     provider_csv = (
-        "SKU;Nombre;Categoría;Precio;Stock\\n"
-        "TEST-001;Producto de prueba;Accesorios;1250;10\\n"
+        "SKU;Nombre;Categoría;Precio;Stock\n"
+        "TEST-001;Producto de prueba;Accesorios;1250;10\n"
     ).encode("utf-8")
     uploads = user.find(ui.upload).elements
     provider_upload = next(
@@ -116,9 +116,9 @@ async def test_changing_suggested_destination_clears_confirmation(user):
         if element.label == "Seleccionar exportación CSV de WooCommerce"
     )
     store_csv = (
-        "SKU,Name,Categories\\n"
-        "STORE-001,Producto existente,Accesorios\\n"
-        "STORE-002,Otro producto,Hogar\\n"
+        "SKU,Name,Categories\n"
+        "STORE-001,Producto existente,Accesorios\n"
+        "STORE-002,Otro producto,Hogar\n"
     ).encode("utf-8")
     store_upload.handle_uploads([
         UploadFile(filename="woocommerce.csv", file=BytesIO(store_csv))
