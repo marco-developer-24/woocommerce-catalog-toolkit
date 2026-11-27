@@ -138,10 +138,10 @@ async def test_changing_suggested_destination_clears_confirmation(user):
     user.find("Ver productos y configurar destino").click()
     await user.should_see("Sugerencia: Accesorios")
 
-    destination_confirmation = user.find(
-        "Confirmo el destino sugerido"
+    destination_confirmation = next(
+        iter(user.find("Confirmo el destino sugerido").elements)
     )
-    destination_confirmation.click()
+    user.find("Confirmo el destino sugerido").click()
     assert destination_confirmation.value is True
 
     user.find("Categoría de destino en WooCommerce").click()
