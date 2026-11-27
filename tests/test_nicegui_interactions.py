@@ -1,12 +1,14 @@
+from io import BytesIO
+
 import pytest
 from nicegui import ui
-from nicegui.testing import User
+from starlette.datastructures import UploadFile
 
 from src.ui.nicegui_app import build_ui
 
 
 @pytest.mark.asyncio
-async def test_validation_step_is_guarded_until_provider_is_confirmed(user: User):
+async def test_validation_step_is_guarded_until_provider_is_confirmed(user):
     @ui.page("/")
     def page():
         build_ui()
@@ -20,3 +22,37 @@ async def test_validation_step_is_guarded_until_provider_is_confirmed(user: User
         "Primero cargá y confirmá el archivo del proveedor."
     )
     await user.should_see("Etapa actual: Archivos")
+
+
+@pytest.mark.asyncio
+async def test_product_selection_checkbox_updates_real_selection_summary(user):
+    @ui.page("/")
+    def page():
+        build_ui()
+
+    await user.open("/")
+
+    csv_content = (
+        "SKU;Nombre;Categoría;Precio;Stock\n"
+        "TEST-001;Producto de prueba;Accesorios;1250;10\n"
+    ).encode("utf-8")
+    upload = user.find(ui.upload).elements[0]
+    await upload.handle_uploads([
+        UploadFile(filename="catalogo.csv", file=BytesIO(csv_content))
+    ])
+
+    await user.should_see("Mapeo de columnas del proveedor")
+    user.find("Confirmar mapeo del proveedor").click()
+    await user.should_see("Configuración del proveedor confirmada")
+
+    user.find("Continuar sin exportación WooCommerce").click()
+    user.find("Validar catálogo").click()
+    await user.should_see("Preparación de altas completada")
+
+    user.find("Continuar a selección de productos").click()
+    await user.should_see("Producto de prueba")
+    await user.should_see("0 seleccionados")
+
+    user.find("Producto de prueba").click()
+
+    await user.should_see("1 seleccionados")
