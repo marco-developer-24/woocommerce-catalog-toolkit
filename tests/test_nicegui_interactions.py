@@ -36,7 +36,12 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
         "SKU;Nombre;Categoría;Precio;Stock\n"
         "TEST-001;Producto de prueba;Accesorios;1250;10\n"
     ).encode("utf-8")
-    upload = next(iter(user.find(ui.upload).elements))
+    uploads = user.find(ui.upload).elements
+    upload = next(
+        element
+        for element in uploads
+        if element.label == "Seleccionar CSV del proveedor"
+    )
     upload.handle_uploads([
         UploadFile(filename="catalogo.csv", file=BytesIO(csv_content))
     ])
