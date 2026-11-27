@@ -19,6 +19,10 @@ from src.application.woocommerce_categories import (
 from src.operations.add_products import prepare_add_products
 from src.operations.select_products import normalize_category
 from src.application.product_selection import set_product_selection
+from src.ui.selection_session import (
+    clear_provider_selection_state,
+    update_category_destination,
+)
 from src.operations.common import BLOCKED, EXCLUDED, READY, REVIEW
 
 
@@ -186,9 +190,7 @@ def build_ui():
                         provider_upload.reset()
                     state["provider_inspection"] = None
                     state["provider"] = None
-                    state["selection_state"] = {}
-                    state["selection_category_mappings"] = {}
-                    state["selection_confirmations"] = {}
+                    clear_provider_selection_state(state)
                     provider_selectors.clear()
                     provider_details.clear()
                     provider_preview.clear()
@@ -984,20 +986,16 @@ def build_ui():
                                     confirmation_control=accepted_control,
                                 ):
                                     selected_destination = event.value
-                                    state["selection_confirmations"].pop(category_key, None)
                                     accepted_state["value"] = None
+                                    update_category_destination(
+                                        state,
+                                        category_key,
+                                        selected_destination,
+                                        suggestion_status=suggestion_data["status"],
+                                        suggested_destination=suggestion_data["destination"],
+                                    )
                                     if confirmation_control["value"] is not None:
                                         confirmation_control["value"].set_value(False)
-                                    if selected_destination:
-                                        if (
-                                            suggestion_data["status"] != "suggested"
-                                            or selected_destination != suggestion_data["destination"]
-                                        ):
-                                            state["selection_category_mappings"][category_key] = selected_destination
-                                        else:
-                                            state["selection_category_mappings"].pop(category_key, None)
-                                    else:
-                                        state["selection_category_mappings"].pop(category_key, None)
                                     refresh_result()
     
                                 destination.on_value_change(on_destination_change)
