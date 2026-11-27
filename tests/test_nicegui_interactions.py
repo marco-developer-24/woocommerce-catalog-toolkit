@@ -41,7 +41,7 @@ async def test_product_selection_checkbox_updates_real_selection_summary(user):
         UploadFile(filename="catalogo.csv", file=BytesIO(csv_content))
     ])
 
-    await user.should_see("Mapeo de columnas del proveedor")
+    await user.should_see("Confirmar mapeo del proveedor")
     user.find("Confirmar mapeo del proveedor").click()
     await user.should_see("Configuración del proveedor confirmada")
 
