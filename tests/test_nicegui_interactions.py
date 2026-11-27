@@ -144,7 +144,13 @@ async def test_changing_suggested_destination_clears_confirmation(user):
     user.find("Confirmo el destino sugerido").click()
     assert destination_confirmation.value is True
 
-    user.find("Categoría de destino en WooCommerce").click()
+    destination_selector = user.find(
+        kind=ui.select,
+        content="Categoría de destino en WooCommerce",
+    )
+    destination_element = next(iter(destination_selector.elements))
+    destination_selector.click()
     user.find("Hogar").click()
 
+    assert destination_element.value == "Hogar"
     assert destination_confirmation.value is False
